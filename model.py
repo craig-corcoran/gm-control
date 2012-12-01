@@ -7,7 +7,7 @@ class Model:
         self.neighbors = {}
         self.theta     = {}
         
-        # P = <S,A,S',R>
+        # X = <S,A,S',R>
         n = 0
         self.state_nodes      = range(n, n + n_state_nodes)
         n += n_state_nodes
@@ -30,14 +30,14 @@ class Model:
         # Initialize Node-wise parameters
         for s in range(self.n_nodes):
             for j in self.chi:
-                self.theta[(s,j)] = numpy.random.random()
+                self.theta[(s,j)] = 0
 
         # Initialize Edge-wise parameters
         for s in range(self.n_nodes):
             for t in self.neighbors[s]:
                 for j in self.chi:
                     for k in self.chi:
-                        self.theta[(s,t,j,k)] = numpy.random.random()
+                        self.theta[(s,t,j,k)] = 0
                 
                 
     def pseudo_likelihood(self, data, theta):
@@ -47,22 +47,27 @@ class Model:
         l = 0
         for s in range(self.n_nodes):
             for d in data:
-                # Ensure d is a list of length |S| whose values are in Chi
+                # Ensure d is a list of length |V| whose values are in Chi
                 assert(len(d) == self.n_nodes)
                 for i in d:
                     assert(i in self.chi)
                     
                 # theta(X_i) + Sum_neighbors theta(X_i,X_t)
-                l += theta[(s,d[s])]
+                a = theta[(s,d[s])]
                 for t in self.neighbors[s]:
-                    l += theta[(s,t,d[s],d[t])]
+                    a += theta[(s,t,d[s],d[t])]
 
                 # log(b) = log( Sum_chi exp{ theta(X_j) + Sum_neighbors theta(X_j,X_t) } )
                 b = 0
                 for j in self.chi:
-                    c = theta[(s,j)]
-                    for t in self.neighbors[s]:
-                        c += theta[(s,t,j,d[t])]
+                        
+                    if j == d[s]:
+                        c = a
+                    else:
+                        c = theta[(s,j)]
+                        for t in self.neighbors[s]:
+                            c += theta[(s,t,j,d[t])]
+
                     b += numpy.exp(c)
                 l -= numpy.log(b)
         return l
@@ -75,7 +80,9 @@ def main():
     for i in range(5):
         data.append(numpy.random.randint(2, size=a.n_nodes))
 
-    print a.pseudo_likelihood(data, a.theta)
+    val = a.pseudo_likelihood(data, a.theta)
+    print val
+    print numpy.exp(val)
 
 
 if __name__ == "__main__":

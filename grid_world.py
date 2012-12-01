@@ -13,7 +13,7 @@ class GridWorld:
 
     '''
 
-    _vecs = numpy.array([[1, 0], [-1, 0], [0, 1], [0, -1]]) #[0, 0]]) # 4 movement dirs
+    _vecs = numpy.array([[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]]) # 5 movement dirs
 
     def __init__(self, wall_matrix, goal_matrix, init_state = None, uniform = False):
         
@@ -88,12 +88,12 @@ class GridWorld:
         gol_ids = map(self.state_to_index, nz)
         self.R[gol_ids] = 1
         
-        if uniform:
+        if uniform: # use uniform diagonal weight matrix D
             self.D = scipy.sparse.dia_matrix(([1]*self.n_states, 0), \
                 (self.n_states, self.n_states))
             assert self.D == scipy.sparse.csc_matrix(numpy.eye(self.n_states))
         else:
-            # find limiting distribution
+            # find limiting distribution (for measuring Bellman error, etc)
             v = numpy.zeros((self.P.shape[0],1))
             v[1,0] = 1
             delta = 1
@@ -102,13 +102,8 @@ class GridWorld:
                 v = numpy.dot(self.P,v)
                 v = v / numpy.linalg.norm(v)
                 delta = numpy.linalg.norm(v-v_old)
-             
-            #self.D = scipy.sparse.dia_matrix((v[:,0],0),(self.n_states, self.n_states))
+
             self.D = scipy.sparse.csc_matrix(numpy.diag(v[:,0]))
-            
-            #db
-            #plot_im(numpy.reshape(v[:,0], (9,9)))
-            #plt.show()
 
             
 
@@ -139,7 +134,6 @@ class GridWorld:
         # if at goal position, 
         if self.goals[tuple(self.state)] == 1:
             return self.random_state() # reinitialize to rand state
-            #return self.state
 
         pos = self.state + action
         if self._check_valid_state(pos):
@@ -186,13 +180,11 @@ class MDP:
         self.env = environment
         self.policy = policy
         
-    def sample(self, n_samples, distribution = 'random policy'):
+    def sample(self, n_samples, distribution = 'policy'):
 
         ''' sample the interaction of policy and environment according to the 
         given distribution for n_samples, returning arrays of state positions 
         and rewards '''
-        
-
         
         if distribution is 'uniform':
         
@@ -224,7 +216,7 @@ class MDP:
                 rewards[i] = r
 
 
-        elif distribution is 'random policy':
+        elif distribution is 'policy':
 
             print 'sampling with a random policy distribution'
 
@@ -247,16 +239,16 @@ class MDP:
             action = self.policy.choose_action(choices)
             actions[i+1] = action
 
-            states   = states[:-1,:]
-            states_p = states[1:, :]
-            actions = actions[:-1,:]
-            actions_p = actions[1:,:]
+            s   = states[:-1,:]
+            s_p = states[1:, :]
+            a = actions[:-1,:]
+            a_p = actions[1:,:]
             
         else:
             print 'bad distribution string'
             assert False
 
-        return states, states_p, actions, actions_p, rewards
+        return s, s_p, a, a_p, rewards
 
          
 
@@ -275,7 +267,6 @@ def init_mdp(goals = None, walls_on = False, size = 9):
  
     walls = numpy.zeros((size,size))
     if walls_on:
-        #walls[:, size/2] = 1
         walls[size/2, :] = 1
         walls[size/2, size/2] = 0 
 
@@ -287,6 +278,19 @@ def init_mdp(goals = None, walls_on = False, size = 9):
 
     return mdp
 
+def value_iteration(P, R, gam, eps = 1e-4):
+    '''solve for true value function using value iteration '''
+    V = numpy.zeros((P.shape[0], 1))
+    delta = 1e4
+    while numpy.linalg.norm(delta) > eps:
+        print numpy.linalg.norm(delta)
+        delta = R + gam * numpy.dot(P, V) - V
+        V = V + delta
+
+    print V.shape
+    plt.imshow(numpy.reshape(V, (9,9)), interpolation = 'nearest', cmap = 'jet')
+    plt.colorbar()
+    plt.show()
 
 def plot_weights(W, im_shape):
         
@@ -309,182 +313,16 @@ def plot_im(W):
     plt.colorbar()
 
 
-def value_iteration(P, R, gam, eps = 1e-4):
-    '''solve for true value function using value iteration - assumes no sampled
-    matrices PHI and PHI_p'''
-    V = numpy.zeros((P.shape[0], 1))
-    delta = 1e4
-    while numpy.linalg.norm(delta) > eps:
-        print numpy.linalg.norm(delta)
-        delta = R + gam * numpy.dot(P, V) - V
-        V = V + delta
-
-    print V.shape
-    plt.imshow(numpy.reshape(V, (9,9)), interpolation = 'nearest', cmap = 'jet')
-    plt.colorbar()
-    plt.show()
-
-# TODO weight optimal bellman error by policy distribution
-# TODO clean up methods below
-# add goal/restart transitions to P
-def _bell_err(PHI, PHI_p, R, gam, D = None):
-    
-    n_samples, n_features = PHI.shape
-
-     #subtract mean
-    #means = numpy.mean(PHI.toarray(), axis=0)
-    #print means[None,:].shape
-    #M = scipy.sparse.csc_matrix(numpy.repeat(means[None,:], PHI.shape[0], axis=0))
-    
-    #assert (numpy.mean(PHI.toarray(), axis = 0) == numpy.mean(PHI.toarray(), axis = 0)).all()
-
-    #print M.shape
-    #PHI = PHI - M
-    #PHI_p = PHI_p - M
-
-    #R = scipy.sparse.csc_matrix(R.todense() - numpy.mean(R.todense()))
-    
-    #append constant feature
-    n_features = n_features + 1
-    PHI = scipy.sparse.hstack((PHI, \
-                                    numpy.ones((n_samples,1))))
-    PHI_p = scipy.sparse.hstack((PHI_p, \
-                                    numpy.ones((n_samples,1))))
-
-
-    
-
-     #normalize columns to 1?
-    #PHI = PHI * scipy.sparse.csc_matrix(scipy.sparse.dia_matrix( \
-        #(1./numpy.apply_along_axis(numpy.linalg.norm, 0, PHI.toarray()), 0)\
-        #, (n_features, n_features)))
-
-    #PHI_p = PHI_p * scipy.sparse.csc_matrix(scipy.sparse.dia_matrix( \
-        #(1./numpy.apply_along_axis(numpy.linalg.norm, 0, PHI_p.toarray()), 0)\
-        #, (n_features, n_features)))
-    
-    #PHI = scipy.sparse.csc_matrix(numpy.dot(PHI.toarray(), numpy.diag(1./(numpy.apply_along_axis(numpy.linalg.norm, 0, PHI.toarray()) + 1e-8))))
-    #PHI_p = scipy.sparse.csc_matrix(numpy.dot(PHI_p.toarray(), numpy.diag(1./(numpy.apply_along_axis(numpy.linalg.norm, 0, PHI_p.toarray()) + 1e-8))))
-
-    #PHI = PHI * scipy.sparse.csc_matrix(numpy.diag(1./numpy.apply_along_axis(numpy.linalg.norm, 0, PHI.toarray())))
-
-    #PHI_p = PHI_p * scipy.sparse.csc_matrix(numpy.diag(1./numpy.apply_along_axis(numpy.linalg.norm, 0, PHI_p.toarray())))
-
-    #print numpy.sum(numpy.apply_along_axis(numpy.linalg.norm, 0, PHI.todense()))
-    #assert (numpy.sum(numpy.apply_along_axis(numpy.linalg.norm, 0, PHI.todense())) - n_features) < 1e-4
-
-        
-    if D is None:
-        D = scipy.sparse.csc_matrix(numpy.diag([1]*n_samples))
-        #D = scipy.sparse.csc_matrix(scipy.sparse.dia_matrix(([1]*n_samples, 0), \
-                #(n_samples, n_samples)))
-    
-    print 'solving'
-    # test bellman error (using same dataset used to set w)
-    A = PHI.T * D * (PHI - gam * PHI_p) + scipy.sparse.csc_matrix(1e-12 * numpy.eye(n_features))
-    b = PHI.T * D * R
-    w = scipy.sparse.csc_matrix(numpy.linalg.solve(A.toarray(), b.toarray()))
-
-    
-    # TODO (1./n_samples) here? Dsqrt * to weight BE?
-    be = R + (gam * PHI_p - PHI) * w
-    BE = float((be.T * D * be).todense()) # weighted squared norm
-    
-    
-    # TODO add weighting to solver 
-    # reward error
-    A = PHI.T * D * PHI + scipy.sparse.csc_matrix(1e-12*numpy.eye(n_features))
-    b = PHI.T * D * R
-    w_rew = scipy.sparse.csc_matrix(numpy.linalg.solve(A.toarray(), b.toarray()))
-    re = PHI * w_rew - R
-    RE = float((re.T * D * re).todense())
-
-    # model error (general/average and component that contributes to BE)
-    B = PHI.T * D * PHI_p
-    w_phi = scipy.sparse.csc_matrix(numpy.linalg.solve(A.toarray(), B.toarray()))
-    M = (PHI * w_phi - PHI_p) # model error matrix
-
-    ME_gen = numpy.trace((M.T * D * M).todense())
-    me = (M * w)
-    ME_bel = float((me.T * D * me).todense())
-    
-    
-    # visualize bellman error, db
-    #print 'bellman error'
-    #plt.imshow(be.toarray().reshape(9,9), interpolation = 'nearest', cmap = 'gray')
-    #plt.colorbar()
-    plt.show()
-    
-    
-    ## visualize (approx) value function , db
-    print 'value function'
-    v = (PHI * w)
-    V = v.toarray().reshape(9,9)
-    #plt.subplot(211)
-    plt.imshow(V, interpolation = 'nearest', cmap = 'jet')
-    plt.colorbar()
-
-    #v = (PHI.todense() * w_alt)
-    #V = v.reshape(9,9)
-    #plt.subplot(212)
-    #plt.imshow(V, interpolation = 'nearest', cmap = 'gray')
-    #plt.colorbar()
-    #plt.subplot(212)
-    #d = scipy.sparse.csc_matrix(1./(D.toarray() + 1e-12)) 
-    #V = (d * v).toarray().reshape((9,9))
-    #plt.imshow(V, interpolation = 'nearest', cmap = 'gray')
-    #plt.colorbar()
-    #plt.show()
-    #visualize one-step transitions'
-    #print PHI_p.shape
-    #plot_weights(PHI_p.todense()[:,50:75], (9,9))
-
-    return BE, RE, ME_gen, ME_bel
-
-def limit_dist():
-    mdp = init_mdp(size=9, walls_on = True)
-    env = mdp.env
-
-    P = env.P #+ numpy.eye(env.P.shape[0]) * 1e-6
-    #w, v = numpy.linalg.eig(P)
-    #v = v[numpy.argsort(w)]
-
-    #pi = v[:,0]    
-    #print pi
-    #plot_im(numpy.reshape(pi, (9,9)))
-    #plt.show()
-    
-    pi = numpy.zeros(P.shape[0])
-    pi[0] = 1
-    delta = 1e10
-    i=0
-    while delta > 1e-10:
-        
-        print i
-        i += 1
-
-        pi_old = copy.deepcopy(pi)
-        pi = numpy.dot(P,pi)
-        pi = pi / numpy.linalg.norm(pi)
-
-        delta = numpy.linalg.norm(pi-pi_old)
-    
-    plot_im(numpy.reshape(pi, (9,9)))
-    plt.show()
-
-
-
 def test_grid_world():
 
-    rand_policy = RandomPolicy()
+    mdp = init_mdp()
 
-    walls = numpy.zeros((9,9))
-    grid_world = GridWorld(walls)
-
-    mdp = MDP(grid_world, rand_policy)
+    grid_world = mdp.env
     
-    states, rewards = mdp.sample(100)
-    assert len(states) == len(rewards) + 1
+    states, states_p, actions, actions_p, rewards = mdp.sample(100)
+
+    assert len(states) == len(rewards) == len(states_p)
+    assert len(states) == len(actions) == len(actions_p)
 
     # assert states are all in bounds
     assert len(states[states < 0]) == 0
