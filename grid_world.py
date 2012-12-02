@@ -13,7 +13,8 @@ class GridWorld:
 
     '''
 
-    _vecs = numpy.array([[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]]) # 5 movement dirs
+    _vecs = numpy.array([[1, 0], [-1, 0], [0, 1], [0, -1]]) # 4 movement dirs
+    action_code = dict(zip(map(tuple,_vecs),[(0, 0),(0, 1), (1, 0), (1, 1)]))
 
     def __init__(self, wall_matrix, goal_matrix, init_state = None, uniform = False):
         
@@ -312,7 +313,46 @@ def plot_im(W):
     plt.imshow(W, interpolation = 'nearest', cmap = 'gray')
     plt.colorbar()
 
+def sample_grid_world(n_samples, state_rep = 'tabular'):
 
+    mdp = init_mdp()
+    env = mdp.env
+    states, states_p, actions, actions_p, rewards = mdp.sample(n_samples)
+    
+    if state_rep == 'tabular':
+        n_state_var = env.n_states
+    elif state_rep == 'factored':
+        n_state_var = env.n_rows + env.n_cols
+    
+    n_act_var = 2 # number of action variables
+    
+    # x = (s,a,s',r)
+    X = numpy.zeros((n_samples, 2 * n_state_var + n_act_var + 1)) 
+
+    for i in xrange(n_samples):
+        
+        if state_rep == 'tabular':
+            X[i,env.state_to_index(states[i,:])] = 1
+            X[i,n_state_var:n_state_var + n_act_var] = env.action_code[tuple(actions[i,:])]
+            X[i,n_state_var + n_act_var + env.state_to_index(states_p)] = 1
+            X[i,-1] = rewards[i]
+
+        elif state_rep == 'factored':
+            state = states[i,:]
+            state_p = states[i,:]
+
+            # encode row and col position
+            X[i,state[0]] = 1 
+            X[i,env.n_rows + state[1]] = 1
+
+            X[i,n_state_var:n_state_var + n_act_var] = env.action_code[tuple(actions[i,:])]
+
+            X[i,n_state_var + n_act_var + state_p[0]] = 1
+            X[i,n_state_var + n_act_var + env.n_rows + state_p[1]] = 1
+            X[i,-1] = rewards[i]    
+
+    return X
+        
 def test_grid_world():
 
     mdp = init_mdp()
@@ -330,6 +370,9 @@ def test_grid_world():
     y_pos = states[:,1]
     assert len(x_pos[ x_pos >= grid_world.n_rows ]) == 0
     assert len(y_pos[ y_pos >= grid_world.n_cols ]) == 0
+    
+    X = sample_grid_world(100)
+
 
 
             
