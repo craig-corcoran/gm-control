@@ -1,4 +1,6 @@
 import numpy
+import theano.tensor
+import theano.function
 
 class Model:
     def __init__(self, n_state_nodes, n_action_nodes, n_next_state_nodes, n_reward_nodes = 1, chi = [0,1]):
@@ -45,7 +47,7 @@ class Model:
         values to all of the nodes'''
         
         l = 0.
-        for s in range(self.n_nodes):
+        for s in xrange(self.n_nodes):
             for d in data:
                 # Ensure d is a list of length |V| whose values are in Chi
                 assert(len(d) == self.n_nodes)
@@ -71,6 +73,7 @@ class Model:
                     b += numpy.exp(c)
                 l -= numpy.log(b)
         return l / data.shape[0]
+
 
     def grad_pseudo_likelihood(self, theta, data):
         grad = []
@@ -103,9 +106,7 @@ class Model:
         k = key[3]
         
         return 1
-
-            
-                
+     
 def main():
     import grid_world
     import time
