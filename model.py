@@ -24,6 +24,7 @@ class Model:
         self.edges += list(itertools.product(self.action_nodes, self.next_state_nodes))
         self.edges += list(itertools.product(self.state_nodes, self.reward_nodes))
         self.edges += list(itertools.product(self.action_nodes, self.reward_nodes))
+        self.edges = numpy.array(self.edges)
 
         self.n_nodes = n_state_nodes + n_action_nodes + n_next_state_nodes + n_reward_nodes
         self.n_edges = len(self.edges)
@@ -34,8 +35,20 @@ class Model:
         # Theta = <node-wise params, edge-wise params>
         # theta_s,j = |chi| * s + j
         # theta_edge,j,k = |chi|*|V| + (|chi|^2)*edge + |chi|*j + k
-        self.theta = csc_matrix( (self.n_params,1), dtype=np.int8)
+        #self.theta = csc_matrix( (self.n_params,1), dtype=np.float)
+        self.theta = numpy.zeros(self.n_params)
 
+    def get_phi_indexes(self, d):
+        index_list = numpy.zeros(self.n_nodes + self.n_edges, dtype = numpy.int32)
+            
+        # 2 * indx + val
+        index_list[:self.n_nodes] = d + numpy.array(range(0,self.n_nodes*2,2), dtype = numpy.int32)
+
+        index_list[self.n_nodes:] = numpy.array(range(0,d.shape[0]*4,4), dtype = numpy.int32) + \
+                    numpy.sum((2,1) * d[self.edges], axis = 1)
+
+        return index_list
+        
                 
     def get_phi(self, d):
         ''' Convert data array into phi(X)'''
@@ -47,6 +60,38 @@ class Model:
             phi[2 * self.n_nodes + indx*4 + 2*d[e[0]] + d[e[1]], 0] = 1
         return phi
 
+    def new_pseudo_likelihood(self, data, theta):
+        ''' data is a list of lists where each inner list is a assigment of
+        values to all of the nodes'''
+
+        l = 0.
+        for d in data:
+            
+            n_nz_col = self.n_nodes + self.n_edges    # number of nonzeros per column in PHI
+            n_nz = nz_col * n_nodes # total number of nonzeros in PHI
+            #Phi = csc_matrix( (self.n_params,self.n_nodes+1), dtype=np.int8)
+            #Phi[:,0] = self.get_phi(d)
+            rows = numpy.zeros( n_nz, dtype = np.int32)
+            cols = numpy.zeros( n_nz, dtype = np.int32)
+            vals = numpy.ones( n_nz, dtype = np.int8)
+
+
+            rows[:n_nz_col] = self.get_phi_indexes(d)
+            cols[:n_nz_col] = 0
+            d_prime = copy.deepcopy(d)            
+            for i in xrange(self.n_nodes):
+                d_prime[i] = 1 if d[i] == 0 else 0
+                rows[i*n_nz_col:(i+1)*n_nz_col] = self.get_phi_indexes(d)
+                cols[i*n_nz_col:(i+1)*n_nz_col] = i+1
+                d_prime[i] = d[i]
+
+            Phi = scipy.sparse.coo_matrix((vals,(rows,cols)), shape=(self.n_params,self.n_nodes+1))
+            
+            # g = <|V| + 1>
+            g = Phi.T.dot(self.theta)
+
+            l += self.n_nodes * g[0] - np.sum(np.log(np.exp(np.repeat(g[0], self.n_nodes)) + np.exp(g[1:])))
+        return l / data.shape[0]
                 
     def pseudo_likelihood(self, data, theta):
         ''' data is a list of lists where each inner list is a assigment of
