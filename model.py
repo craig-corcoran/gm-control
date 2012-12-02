@@ -89,10 +89,26 @@ class Model:
         s = key[0]
         j = key[1]
 
-        #for d in data:
+        grad = 0.
+        for d in data:
+            if d[s] == j:
+                grad += 1
+
+            alpha = theta[(s,j)]
+            for t in self.neighbors[s]:
+                alpha += theta[(min(s,t),max(s,t),j,d[t])]
+            alpha = numpy.exp(alpha)
+
+            alpha_denom = 0.
+            for J in self.chi:
+                b = theta[(s,J)]
+                for t in self.neighbors[s]:
+                    b += theta[(min(s,t),max(s,t),J,d[t])]
+                alpha_denom += numpy.exp(b)
+
+            grad -= alpha / alpha_denom
             
-            
-        return 0
+        return grad
 
     def grad_pseudo_likelihood_edgewise(self, key, theta, data):
         ''' Gradient W.R.T. egde s,t taking value j,k '''
@@ -102,7 +118,42 @@ class Model:
         j = key[2]
         k = key[3]
         
-        return 1
+        grad = 0.
+        for d in data:
+            if d[s] == j and d[t] == k:
+                grad += 2
+                
+                # First set of alphas
+                alpha = theta[(t,k)]
+                for T in self.neighbors[t]:
+                    alpha += theta[(min(t,T),max(t,T),k,d[T])]
+                alpha = numpy.exp(alpha)
+
+                alpha_denom = 0.
+                for J in self.chi:
+                    b = theta[(t,J)]
+                    for T in self.neighbors[t]:
+                        b += theta[(min(t,T),max(t,T),J,d[T])]
+                    alpha_denom += numpy.exp(b)
+
+                grad -= alpha / alpha_denom
+
+                # Second set of alphas
+                alpha = theta[(s,j)]
+                for T in self.neighbors[s]:
+                    alpha += theta[(min(s,T),max(s,T),j,d[T])]
+                alpha = numpy.exp(alpha)
+
+                alpha_denom = 0.
+                for J in self.chi:
+                    b = theta[(s,J)]
+                    for T in self.neighbors[s]:
+                        b += theta[(min(s,T),max(s,T),J,d[T])]
+                    alpha_denom += numpy.exp(b)
+
+                grad -= alpha / alpha_denom
+            
+        return grad
 
             
                 
@@ -110,12 +161,12 @@ def main():
     import grid_world
     import time
 
-    a = Model(81, 2, 81)
+    a = Model(18, 2, 18)
 
     print 'Generating Samples Trajectory from Gridworld...'
     start = time.time()
     mdp = grid_world.MDP()
-    data = mdp.sample_grid_world(100)
+    data = mdp.sample_grid_world(5)
     elapsed = (time.time() - start)
     print elapsed, 'seconds'
 
@@ -123,16 +174,16 @@ def main():
     # for i in range(5):
     #     data.append(numpy.random.randint(2, size=a.n_nodes))
 
-    print 'Computing Pseudo-Likelihood...'
-    start = time.time()
-    val = a.pseudo_likelihood(data, a.theta)
-    elapsed = (time.time() - start)
-    print elapsed, 'seconds'
+    # print 'Computing Pseudo-Likelihood...'
+    # start = time.time()
+    # val = a.pseudo_likelihood(data, a.theta)
+    # elapsed = (time.time() - start)
+    # print elapsed, 'seconds'
 
-    print val
-    print numpy.exp(val)
+    # print val
+    # print numpy.exp(val)
 
-    #print a.grad_pseudo_likelihood(a.theta, data)
+    print a.grad_pseudo_likelihood(a.theta, data)
 
 
 if __name__ == "__main__":
