@@ -55,7 +55,7 @@ class Model:
                 # theta(X_i) + Sum_neighbors theta(X_i,X_t)
                 a = theta[(s,d[s])]
                 for t in self.neighbors[s]:
-                    a += theta[(min(s,t),max(s,t),d[s],d[t])]
+                    a += theta[(s,t,d[s],d[t])] if s<t else theta[(t,s,d[t],d[s])]
 
                 # log(b) = log( Sum_chi exp{ theta(X_j) + Sum_neighbors theta(X_j,X_t) } )
                 b = 0
@@ -66,7 +66,7 @@ class Model:
                     else:
                         c = theta[(s,j)]
                         for t in self.neighbors[s]:
-                            c += theta[(min(s,t),max(s,t),j,d[t])]
+                            c += theta[(s,t,d[s],d[t])] if s<t else theta[(t,s,d[t],d[s])]
 
                     b += numpy.exp(c)
                 l -= numpy.log(b)
@@ -96,14 +96,14 @@ class Model:
 
             alpha = theta[(s,j)]
             for t in self.neighbors[s]:
-                alpha += theta[(min(s,t),max(s,t),j,d[t])]
+                alpha += theta[(s,t,j,d[t])] if s<t else theta[(t,s,d[t],j)]
             alpha = numpy.exp(alpha)
 
             alpha_denom = 0.
             for J in self.chi:
                 b = theta[(s,J)]
                 for t in self.neighbors[s]:
-                    b += theta[(min(s,t),max(s,t),J,d[t])]
+                    b += theta[(s,t,J,d[t])] if s<t else theta[(t,s,d[t],J)]
                 alpha_denom += numpy.exp(b)
 
             grad -= alpha / alpha_denom
@@ -126,14 +126,14 @@ class Model:
                 # First set of alphas
                 alpha = theta[(t,k)]
                 for T in self.neighbors[t]:
-                    alpha += theta[(min(t,T),max(t,T),k,d[T])]
+                    alpha += theta[(t,T,k,d[T])] if t<T else theta[(T,t,d[T],k)]
                 alpha = numpy.exp(alpha)
 
                 alpha_denom = 0.
                 for J in self.chi:
                     b = theta[(t,J)]
                     for T in self.neighbors[t]:
-                        b += theta[(min(t,T),max(t,T),J,d[T])]
+                        b += theta[(t,T,J,d[T])] if t<T else theta[(T,t,d[T],J)]
                     alpha_denom += numpy.exp(b)
 
                 grad -= alpha / alpha_denom
@@ -141,14 +141,14 @@ class Model:
                 # Second set of alphas
                 alpha = theta[(s,j)]
                 for T in self.neighbors[s]:
-                    alpha += theta[(min(s,T),max(s,T),j,d[T])]
+                    alpha += theta[(s,T,j,d[T])] if s<T else theta[(T,s,d[T],j)]
                 alpha = numpy.exp(alpha)
 
                 alpha_denom = 0.
                 for J in self.chi:
                     b = theta[(s,J)]
                     for T in self.neighbors[s]:
-                        b += theta[(min(s,T),max(s,T),J,d[T])]
+                        b += theta[(s,T,J,d[T])] if s<T else theta[(T,s,d[T],J)]
                     alpha_denom += numpy.exp(b)
 
                 grad -= alpha / alpha_denom
