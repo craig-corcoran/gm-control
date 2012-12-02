@@ -177,10 +177,30 @@ class RandomPolicy:
 
 class MDP:
     
-    def __init__(self, environment, policy):
+    def __init__(self, environment=None, policy=None):
         self.env = environment
         self.policy = policy
-        
+
+        if environment is None:
+            size = 9
+            buff = size/9
+            pos = size/3-1
+            goals = numpy.zeros((size,size))
+            goals[pos-buff:pos+buff, pos-buff:pos+buff] = 1
+            #goals[pos-buff:pos+buff, size-pos-buff:size-pos+buff] = 1
+            #goals[size-pos-buff:size-pos+buff, pos-buff:pos+buff] = 1
+            #goals[size-pos-buff:size-pos+buff, size-pos-buff:size-pos+buff] = 1
+
+            walls = numpy.zeros((size,size))
+            walls[size/2, :] = 1
+            walls[size/2, size/2] = 0 
+
+            self.env = GridWorld(walls, goals)
+
+        if policy is None:
+            self.policy = RandomPolicy()
+
+
     def sample(self, n_samples, distribution = 'policy'):
 
         ''' sample the interaction of policy and environment according to the 
@@ -251,6 +271,47 @@ class MDP:
 
         return s, s_p, a, a_p, rewards
 
+
+    def sample_grid_world(self, n_samples, state_rep = 'tabular'):
+
+        # mdp = init_mdp()
+        # env = mdp.env
+        states, states_p, actions, actions_p, rewards = self.sample(n_samples)
+
+        if state_rep == 'tabular':
+            n_state_var = self.env.n_states
+        elif state_rep == 'factored':
+            n_state_var = self.env.n_rows + self.env.n_cols
+
+        n_act_var = 2 # number of action variables
+
+        # x = (s,a,s',r)
+        X = numpy.zeros((n_samples, 2 * n_state_var + n_act_var + 1)) 
+
+        for i in xrange(n_samples):
+
+            if state_rep == 'tabular':
+                X[i,self.env.state_to_index(states[i,:])] = 1
+                X[i,n_state_var:n_state_var + n_act_var] = self.env.action_code[tuple(actions[i,:])]
+                X[i,n_state_var + n_act_var + self.env.state_to_index(states_p)] = 1
+                X[i,-1] = rewards[i]
+
+            elif state_rep == 'factored':
+                state = states[i,:]
+                state_p = states[i,:]
+
+                # encode row and col position
+                X[i,state[0]] = 1 
+                X[i,self.env.n_rows + state[1]] = 1
+
+                X[i,n_state_var:n_state_var + n_act_var] = self.env.action_code[tuple(actions[i,:])]
+
+                X[i,n_state_var + n_act_var + state_p[0]] = 1
+                X[i,n_state_var + n_act_var + self.env.n_rows + state_p[1]] = 1
+                X[i,-1] = rewards[i]    
+
+        return X
+
          
 
 def init_mdp(goals = None, walls_on = False, size = 9):
@@ -313,45 +374,6 @@ def plot_im(W):
     plt.imshow(W, interpolation = 'nearest', cmap = 'gray')
     plt.colorbar()
 
-def sample_grid_world(n_samples, state_rep = 'tabular'):
-
-    mdp = init_mdp()
-    env = mdp.env
-    states, states_p, actions, actions_p, rewards = mdp.sample(n_samples)
-    
-    if state_rep == 'tabular':
-        n_state_var = env.n_states
-    elif state_rep == 'factored':
-        n_state_var = env.n_rows + env.n_cols
-    
-    n_act_var = 2 # number of action variables
-    
-    # x = (s,a,s',r)
-    X = numpy.zeros((n_samples, 2 * n_state_var + n_act_var + 1)) 
-
-    for i in xrange(n_samples):
-        
-        if state_rep == 'tabular':
-            X[i,env.state_to_index(states[i,:])] = 1
-            X[i,n_state_var:n_state_var + n_act_var] = env.action_code[tuple(actions[i,:])]
-            X[i,n_state_var + n_act_var + env.state_to_index(states_p)] = 1
-            X[i,-1] = rewards[i]
-
-        elif state_rep == 'factored':
-            state = states[i,:]
-            state_p = states[i,:]
-
-            # encode row and col position
-            X[i,state[0]] = 1 
-            X[i,env.n_rows + state[1]] = 1
-
-            X[i,n_state_var:n_state_var + n_act_var] = env.action_code[tuple(actions[i,:])]
-
-            X[i,n_state_var + n_act_var + state_p[0]] = 1
-            X[i,n_state_var + n_act_var + env.n_rows + state_p[1]] = 1
-            X[i,-1] = rewards[i]    
-
-    return X
         
 def test_grid_world():
 
