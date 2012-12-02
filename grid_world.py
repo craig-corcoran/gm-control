@@ -272,7 +272,7 @@ class MDP:
         return s, s_p, a, a_p, rewards
 
 
-    def sample_grid_world(self, n_samples, state_rep = 'tabular'):
+    def sample_grid_world(self, n_samples, state_rep = 'factored'):
 
         # mdp = init_mdp()
         # env = mdp.env
