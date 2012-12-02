@@ -183,7 +183,17 @@ def main():
     # print val
     # print numpy.exp(val)
 
-    print a.grad_pseudo_likelihood(a.theta, data)
+    alpha = -.2
+    for i in xrange(10):
+        print a.pseudo_likelihood(data, a.theta)
+
+        grad = a.grad_pseudo_likelihood(a.theta, data)
+        indx = 0
+        for key in a.theta.keys():
+            a.theta[key] += alpha * grad[indx]
+            indx += 1
+            
+    
 
 
 if __name__ == "__main__":
