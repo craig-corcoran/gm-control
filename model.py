@@ -59,6 +59,9 @@ class Model:
                 for t in self.neighbors[s]:
                     a += theta[(s,t,d[s],d[t])] if s<t else theta[(t,s,d[t],d[s])]
 
+                # SHOULD a GET ADDED HERE?
+                l += a
+
                 # log(b) = log( Sum_chi exp{ theta(X_j) + Sum_neighbors theta(X_j,X_t) } )
                 b = 0
                 for j in self.chi:
