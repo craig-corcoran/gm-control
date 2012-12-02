@@ -1,14 +1,13 @@
-import numpy
-import theano.tensor
-import theano.function
+import copy
+import numpy as np
+import itertools
+# import theano.tensor
+# import theano.function
+import scipy.optimize
+from scipy.sparse import *
 
 class Model:
-    def __init__(self, n_state_nodes, n_action_nodes, n_next_state_nodes, n_reward_nodes = 1, chi = [0,1]):
-        self.n_nodes   = n_state_nodes + n_action_nodes + n_next_state_nodes + n_reward_nodes
-        self.chi       = chi
-        self.neighbors = {}
-        self.theta     = {}
-        
+    def __init__(self, n_state_nodes, n_action_nodes, n_next_state_nodes, n_reward_nodes = 1):
         # X = <S,A,S',R>
         n = 0
         self.state_nodes      = range(n, n + n_state_nodes)
@@ -19,147 +18,153 @@ class Model:
         n += n_next_state_nodes
         self.reward_nodes     = range(n, n + n_reward_nodes)
 
-        # Initialize the adjacency dictionary
-        for i in self.state_nodes:
-            self.neighbors[i] = list(set(range(self.n_nodes)) - set(self.state_nodes))
-        for i in self.action_nodes:
-            self.neighbors[i] = list(set(range(self.n_nodes)) - set(self.action_nodes))
-        for i in self.next_state_nodes:
-            self.neighbors[i] = list(set(range(self.n_nodes)) - set(self.reward_nodes) - set(self.next_state_nodes))
-        for i in self.reward_nodes:
-            self.neighbors[i] = list(set(range(self.n_nodes)) - set(self.reward_nodes) - set(self.next_state_nodes))
+        self.edges = []
+        self.edges += list(itertools.product(self.state_nodes, self.action_nodes))
+        self.edges += list(itertools.product(self.state_nodes, self.next_state_nodes))
+        self.edges += list(itertools.product(self.action_nodes, self.next_state_nodes))
+        self.edges += list(itertools.product(self.state_nodes, self.reward_nodes))
+        self.edges += list(itertools.product(self.action_nodes, self.reward_nodes))
 
-        # Initialize Node-wise parameters
-        for s in range(self.n_nodes):
-            for j in self.chi:
-                self.theta[(s,j)] = 0
+        self.n_nodes = n_state_nodes + n_action_nodes + n_next_state_nodes + n_reward_nodes
+        self.n_edges = len(self.edges)
+        self.chi     = [0,1]
 
-        # Initialize Edge-wise parameters
-        for s in range(self.n_nodes):
-            for t in self.neighbors[s]:
-                for j in self.chi:
-                    for k in self.chi:
-                        self.theta[(min(s,t),max(s,t),j,k)] = 0
+        self.n_params = self.n_nodes*len(self.chi) + self.n_edges*len(self.chi)*len(self.chi)
+        
+        # Theta = <node-wise params, edge-wise params>
+        # theta_s,j = |chi| * s + j
+        # theta_edge,j,k = |chi|*|V| + (|chi|^2)*edge + |chi|*j + k
+        self.theta = csc_matrix( (self.n_params,1), dtype=np.int8)
+
                 
+    def get_phi(self, d):
+        ''' Convert data array into phi(X)'''
+        # Here we assume len(chi) = 2
+        phi = csc_matrix((self.n_params,1), dtype=np.int8)
+        for indx,val in enumerate(d):
+            phi[2 * indx + val, 0] = 1 
+        for indx,e in enumerate(self.edges):
+            phi[2 * self.n_nodes + indx*4 + 2*d[e[0]] + d[e[1]], 0] = 1
+        return phi
+
                 
     def pseudo_likelihood(self, data, theta):
         ''' data is a list of lists where each inner list is a assigment of
         values to all of the nodes'''
         
+        csc_matrix(self.theta)
+
         l = 0.
-        for s in xrange(self.n_nodes):
-            for d in data:
-                # Ensure d is a list of length |V| whose values are in Chi
-                assert(len(d) == self.n_nodes)
-                for i in d:
-                    assert(i in self.chi)
-                    
-                # theta(X_i) + Sum_neighbors theta(X_i,X_t)
-                a = theta[(s,d[s])]
-                for t in self.neighbors[s]:
-                    a += theta[(s,t,d[s],d[t])] if s<t else theta[(t,s,d[t],d[s])]
+        for d in data:
+            # Ensure d is a list of length |V| whose values are in Chi
+            assert(len(d) == self.n_nodes)
+            for i in d:
+                assert(i in self.chi)
 
-                # SHOULD a GET ADDED HERE?
-                l += a
+            #Phi = csc_matrix( (self.n_params,self.n_nodes+1), dtype=np.int8)
+            #Phi[:,0] = self.get_phi(d)
+            Phi = hstack( [self.get_phi(d)], format='csc')
+            d_prime = copy.deepcopy(d)
+            for i in xrange(self.n_nodes):
+                d_prime[i] = 1 if d[i] == 0 else 0
+                Phi = hstack( [Phi, self.get_phi(d_prime)], format='csc', dtype=np.int8)
+                #Phi[:,i+1] = self.get_phi(d_prime)
+                d_prime[i] = d[i]
+            
+            # g = <|V| + 1>
+            g = Phi.T.dot(self.theta).todense()
 
-                # log(b) = log( Sum_chi exp{ theta(X_j) + Sum_neighbors theta(X_j,X_t) } )
-                b = 0
-                for j in self.chi:
-                        
-                    if j == d[s]:
-                        c = a
-                    else:
-                        c = theta[(s,j)]
-                        for t in self.neighbors[s]:
-                            c += theta[(s,t,d[s],d[t])] if s<t else theta[(t,s,d[t],d[s])]
-
-                    b += numpy.exp(c)
-                l -= numpy.log(b)
+            l += self.n_nodes * g[0] - np.sum(np.log(np.exp(np.repeat(g[0], self.n_nodes)) + np.exp(g[1:])))
         return l / data.shape[0]
 
 
-    def grad_pseudo_likelihood(self, theta, data):
-        grad = []
-        for key in theta.keys():
-            if len(key) == 2:   # Node theta
-                grad.append(self.grad_pseudo_likelihood_nodewise(key,theta,data))
-            elif len(key) == 4: # Edge theta
-                grad.append(self.grad_pseudo_likelihood_edgewise(key,theta,data))
-            else:
-                assert(False)
-        return grad
+    # def grad_pseudo_likelihood(self, theta, data):
+    #     grad = []
+    #     for key in theta.keys():
+    #         if len(key) == 2:   # Node theta
+    #             grad.append(self.grad_pseudo_likelihood_nodewise(key,theta,data))
+    #         elif len(key) == 4: # Edge theta
+    #             grad.append(self.grad_pseudo_likelihood_edgewise(key,theta,data))
+    #         else:
+    #             assert(False)
+    #     return grad
 
-    def grad_pseudo_likelihood_nodewise(self, key, theta, data):
-        ''' Gradient W.R.T. node s taking value j '''
-        assert(len(key) == 2)
-        s = key[0]
-        j = key[1]
+    # def grad_pseudo_likelihood_nodewise(self, key, theta, data):
+    #     ''' Gradient W.R.T. node s taking value j '''
+    #     assert(len(key) == 2)
+    #     s = key[0]
+    #     j = key[1]
 
-        grad = 0.
-        for d in data:
-            if d[s] == j:
-                grad += 1
+    #     grad = 0.
+    #     for d in data:
+    #         if d[s] == j:
+    #             grad += 1
 
-            alpha = theta[(s,j)]
-            for t in self.neighbors[s]:
-                alpha += theta[(s,t,j,d[t])] if s<t else theta[(t,s,d[t],j)]
-            alpha = numpy.exp(alpha)
+    #         alpha = theta[(s,j)]
+    #         for t in self.neighbors[s]:
+    #             alpha += theta[(s,t,j,d[t])] if s<t else theta[(t,s,d[t],j)]
+    #         alpha = np.exp(alpha)
 
-            alpha_denom = 0.
-            for J in self.chi:
-                b = theta[(s,J)]
-                for t in self.neighbors[s]:
-                    b += theta[(s,t,J,d[t])] if s<t else theta[(t,s,d[t],J)]
-                alpha_denom += numpy.exp(b)
+    #         alpha_denom = 0.
+    #         for J in self.chi:
+    #             b = theta[(s,J)]
+    #             for t in self.neighbors[s]:
+    #                 b += theta[(s,t,J,d[t])] if s<t else theta[(t,s,d[t],J)]
+    #             alpha_denom += np.exp(b)
 
-            grad -= alpha / alpha_denom
+    #         grad -= alpha / alpha_denom
             
-        return grad
+    #     return grad
 
-    def grad_pseudo_likelihood_edgewise(self, key, theta, data):
-        ''' Gradient W.R.T. egde s,t taking value j,k '''
-        assert(len(key) == 4)
-        s = key[0]
-        t = key[1]
-        j = key[2]
-        k = key[3]
+    # def grad_pseudo_likelihood_edgewise(self, key, theta, data):
+    #     ''' Gradient W.R.T. egde s,t taking value j,k '''
+    #     assert(len(key) == 4)
+    #     s = key[0]
+    #     t = key[1]
+    #     j = key[2]
+    #     k = key[3]
         
-        grad = 0.
-        for d in data:
-            if d[s] == j and d[t] == k:
-                grad += 2
+    #     grad = 0.
+    #     for d in data:
+    #         if d[s] == j and d[t] == k:
+    #             grad += 2
                 
-                # First set of alphas
-                alpha = theta[(t,k)]
-                for T in self.neighbors[t]:
-                    alpha += theta[(t,T,k,d[T])] if t<T else theta[(T,t,d[T],k)]
-                alpha = numpy.exp(alpha)
+    #             # First set of alphas
+    #             alpha = theta[(t,k)]
+    #             for T in self.neighbors[t]:
+    #                 alpha += theta[(t,T,k,d[T])] if t<T else theta[(T,t,d[T],k)]
+    #             alpha = np.exp(alpha)
 
-                alpha_denom = 0.
-                for J in self.chi:
-                    b = theta[(t,J)]
-                    for T in self.neighbors[t]:
-                        b += theta[(t,T,J,d[T])] if t<T else theta[(T,t,d[T],J)]
-                    alpha_denom += numpy.exp(b)
+    #             alpha_denom = 0.
+    #             for J in self.chi:
+    #                 b = theta[(t,J)]
+    #                 for T in self.neighbors[t]:
+    #                     b += theta[(t,T,J,d[T])] if t<T else theta[(T,t,d[T],J)]
+    #                 alpha_denom += np.exp(b)
 
-                grad -= alpha / alpha_denom
+    #             grad -= alpha / alpha_denom
 
-                # Second set of alphas
-                alpha = theta[(s,j)]
-                for T in self.neighbors[s]:
-                    alpha += theta[(s,T,j,d[T])] if s<T else theta[(T,s,d[T],j)]
-                alpha = numpy.exp(alpha)
+    #             # Second set of alphas
+    #             alpha = theta[(s,j)]
+    #             for T in self.neighbors[s]:
+    #                 alpha += theta[(s,T,j,d[T])] if s<T else theta[(T,s,d[T],j)]
+    #             alpha = np.exp(alpha)
 
-                alpha_denom = 0.
-                for J in self.chi:
-                    b = theta[(s,J)]
-                    for T in self.neighbors[s]:
-                        b += theta[(s,T,J,d[T])] if s<T else theta[(T,s,d[T],J)]
-                    alpha_denom += numpy.exp(b)
+    #             alpha_denom = 0.
+    #             for J in self.chi:
+    #                 b = theta[(s,J)]
+    #                 for T in self.neighbors[s]:
+    #                     b += theta[(s,T,J,d[T])] if s<T else theta[(T,s,d[T],J)]
+    #                 alpha_denom += np.exp(b)
 
-                grad -= alpha / alpha_denom
+    #             grad -= alpha / alpha_denom
             
-        return grad
+    #     return grad
+
+    # def learn(self, data):
+    #     ''' Attempts to find the self.theta maximizing the pseudo likelihood'''
+    #     x0 = 
+    #     scipy.optimize.fmin(pseudo_likelihood,
 
 
 def main():
@@ -177,26 +182,26 @@ def main():
 
     # data = []
     # for i in range(5):
-    #     data.append(numpy.random.randint(2, size=a.n_nodes))
+    #     data.append(np.random.randint(2, size=a.n_nodes))
 
-    # print 'Computing Pseudo-Likelihood...'
-    # start = time.time()
-    # val = a.pseudo_likelihood(data, a.theta)
-    # elapsed = (time.time() - start)
-    # print elapsed, 'seconds'
+    print 'Computing Pseudo-Likelihood...'
+    start = time.time()
+    val = a.pseudo_likelihood(data, a.theta)
+    elapsed = (time.time() - start)
+    print elapsed, 'seconds'
 
-    # print val
-    # print numpy.exp(val)
+    print val
+    print np.exp(val)
 
-    alpha = -.2
-    for i in xrange(10):
-        print a.pseudo_likelihood(data, a.theta)
+    # alpha = -.2
+    # for i in xrange(10):
+    #     print a.pseudo_likelihood(data, a.theta)
 
-        grad = a.grad_pseudo_likelihood(a.theta, data)
-        indx = 0
-        for key in a.theta.keys():
-            a.theta[key] += alpha * grad[indx]
-            indx += 1
+    #     grad = a.grad_pseudo_likelihood(a.theta, data)
+    #     indx = 0
+    #     for key in a.theta.keys():
+    #         a.theta[key] += alpha * grad[indx]
+    #         indx += 1
             
     
 
