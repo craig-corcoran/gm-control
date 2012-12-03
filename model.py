@@ -1,8 +1,9 @@
 import copy
 import numpy as np
 import itertools
-# import theano.tensor
-# import theano.function
+import theano.tensor as T
+import theano.sparse
+import theano
 import scipy.optimize
 from scipy.sparse import *
 
@@ -36,7 +37,22 @@ class Model:
         # theta_s,j = |chi| * s + j
         # theta_edge,j,k = |chi|*|V| + (|chi|^2)*edge + |chi|*j + k
         #self.theta = csc_matrix( (self.n_params,1), dtype=np.float)
-        self.theta = np.zeros(self.n_params)
+        self.theta = np.zeros((self.n_params,1))
+    
+        t_Phi = theano.sparse.csr_matrix('Phi', dtype='int8')
+        t_theta = T.dmatrix('theta')
+        t_n_nodes = T.iscalar('n_nodes')
+        t_g = theano.sparse.structured_dot(t_Phi.T, t_theta)
+
+        t_likelihood =  t_n_nodes * t_g[0,0] - T.sum( T.log( T.exp(T.repeat(t_g[0,0], t_n_nodes)) + T.exp(t_g[1:,0]))) 
+
+        print t_likelihood.type
+        
+        self.t_likelihood_func = theano.function([t_Phi, t_theta, t_n_nodes], t_likelihood)
+        
+        t_likelihood_gradient = T.grad(t_likelihood, [t_theta])
+        self.t_gradient_func = theano.function([t_Phi, t_theta, t_n_nodes], t_likelihood_gradient)
+
 
     def get_phi_indexes(self, d):
         index_list = np.zeros(self.n_nodes + self.n_edges, dtype = np.int32)
@@ -59,6 +75,7 @@ class Model:
         for indx,e in enumerate(self.edges):
             phi[2 * self.n_nodes + indx*4 + 2*d[e[0]] + d[e[1]], 0] = 1
         return phi
+            
 
     def new_pseudo_likelihood(self, data, theta):
         ''' data is a list of lists where each inner list is a assigment of
@@ -84,12 +101,17 @@ class Model:
                 rows[i*n_nz_col:(i+1)*n_nz_col] = self.get_phi_indexes(d)
                 cols[i*n_nz_col:(i+1)*n_nz_col] = i+1
                 d_prime[i] = d[i]
-
+                
             Phi = scipy.sparse.coo_matrix((vals,(rows,cols)), shape=(self.n_params,self.n_nodes+1))
+            Phi = scipy.sparse.csr_matrix(Phi)
             
             # g = <|V| + 1>
-            g = Phi.T.dot(theta)
-
+            g = Phi.T.dot(theta).flatten()
+            
+            # TODO for example only, remove
+            print self.t_likelihood_func(Phi, theta, self.n_nodes)
+            print self.t_gradient_func(Phi, theta, self.n_nodes)[0].shape
+            
             l += self.n_nodes * g[0] - np.sum(np.log(np.exp(np.repeat(g[0], self.n_nodes)) + np.exp(g[1:])))
         return l / data.shape[0]
                 
@@ -115,7 +137,7 @@ class Model:
                 d_prime[i] = d[i]
             
             # g = <|V| + 1>
-            g = Phi.T.dot(theta).todense()
+            g = Phi.T.dot(theta)
 
             l += self.n_nodes * g[0] - np.sum(np.log(np.exp(np.repeat(g[0], self.n_nodes)) + np.exp(g[1:])))
         return l / data.shape[0]
@@ -219,7 +241,7 @@ def main():
     print 'Generating Samples Trajectory from Gridworld...'
     start = time.time()
     mdp = grid_world.MDP()
-    data = mdp.sample_grid_world(5)
+    data = mdp.sample_grid_world(25)
     elapsed = (time.time() - start)
     print elapsed, 'seconds'
 
@@ -230,6 +252,7 @@ def main():
     print 'Computing Pseudo-Likelihood...'
     start = time.time()
     val = a.new_pseudo_likelihood(data, a.theta)
+
     elapsed = (time.time() - start)
     print elapsed, 'seconds'
 
