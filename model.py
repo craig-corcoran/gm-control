@@ -37,20 +37,38 @@ class Model:
         # theta_s,j = |chi| * s + j
         # theta_edge,j,k = |chi|*|V| + (|chi|^2)*edge + |chi|*j + k
         #self.theta = csc_matrix( (self.n_params,1), dtype=np.float)
-        #self.theta = np.zeros((self.n_params,1), dtype = np.float)
-        self.theta = np.random.standard_normal((self.n_params, 1))
+        self.theta = np.zeros((self.n_params,1), dtype = np.float)
+        #self.theta = np.random.standard_normal((self.n_params, 1))
+    
+        print 'building transformation matrices for each node'
+        self.T = [None]*self.n_nodes
+        for i in xrange(self.n_nodes):
+            cols = range(2*i, 2*i+2)
+            for indx,e in enumerate(self.edges):
+                if i in e:
+                    num = 2*self.n_nodes + indx*4
+                    cols = cols + range(num, num +4) 
 
-        t_Phi = theano.sparse.csr_matrix('Phi', dtype='int8')
-        t_theta = T.dmatrix('theta')
-        t_n_nodes = T.iscalar('n_nodes')
-        t_g = theano.sparse.structured_dot(t_Phi.T, t_theta)
-
-        t_likelihood =  t_n_nodes * t_g[0,0] - T.sum( T.log( T.exp(T.repeat(t_g[0,0], t_n_nodes)) + T.exp(t_g[1:,0]))) 
- 
-        self.t_likelihood_func = theano.function([t_Phi, t_theta, t_n_nodes], t_likelihood)
+            mat = scipy.sparse.coo_matrix(([1]*len(cols), (range(len(cols)),cols)), shape = (len(cols), self.n_params), dtype = np.int8)
+            self.T[i] = scipy.sparse.csr_matrix(mat)
         
-        t_likelihood_gradient = T.grad(t_likelihood, [t_theta])
-        self.t_gradient_func = theano.function([t_Phi, t_theta, t_n_nodes], t_likelihood_gradient)
+        # define theano stuff
+        t_phi = theano.sparse.csr_matrix('phi', dtype='int8')
+        t_phi_p = theano.sparse.csr_matrix('phi_p', dtype='int8')
+
+        t_theta = T.dmatrix('theta')
+        t_T = theano.sparse.csc_matrix('T', dtype='int8')
+
+        t_theta_i = theano.sparse.structured_dot(t_T, t_theta)
+        t_phi_i = theano.sparse.structured_dot(t_T, t_phi)
+        t_phi_i_p = theano.sparse.structured_dot(t_T, t_phi_p)
+        t_a = theano.sparse.structured_dot(t_phi_i.T, t_theta_i)
+
+        t_var_likelihood = (t_a - T.log(T.exp(t_a) + T.exp(theano.sparse.structured_dot(t_phi_i_p.T, t_theta_i))))[0,0]
+        self.t_var_likelihood_func = theano.function([t_phi, t_phi_p, t_theta, t_T], t_var_likelihood)
+
+        t_var_likelihood_grad = T.grad(t_var_likelihood, [t_theta])
+        self.t_gradient_func = theano.function([t_phi, t_phi_p, t_theta, t_T], t_var_likelihood_grad)
 
 
     def get_phi_indexes(self, d):
@@ -66,13 +84,10 @@ class Model:
         
                 
     def get_phi(self, d):
-        ''' Convert data array into phi(X)'''
-        # Here we assume len(chi) = 2
-        phi = csc_matrix((self.n_params,1), dtype=np.int8)
-        for indx,val in enumerate(d):
-            phi[2 * indx + val, 0] = 1 
-        for indx,e in enumerate(self.edges):
-            phi[2 * self.n_nodes + indx*4 + 2*d[e[0]] + d[e[1]], 0] = 1
+
+        index_list = self.get_phi_indexes(d)
+        phi = coo_matrix(([1]*len(index_list), (index_list, [0] * len(index_list))), shape = (self.n_params, 1), dtype = np.int8)
+        phi = csc_matrix(phi)
         return phi
 
     def get_PHI(self, d):
@@ -109,8 +124,16 @@ class Model:
 
         l = 0.
         for d in data:
-            Phi = self.get_PHI(d)
-            l += self.t_likelihood_func(Phi, theta, self.n_nodes)
+
+            d_prime = copy.deepcopy(d)
+            phi = self.get_phi(d)
+            for i in xrange(self.n_nodes):
+                d_prime[i] = 1 if d[i] == 0 else 0
+                phi_p = self.get_phi(d_prime)
+                t = self.T[i]
+                d_prime[i] = d[i]
+
+                l += self.t_var_likelihood_func(phi, phi_p, theta, t)
         
         return (-1. * l) / len(data)
 
@@ -118,11 +141,17 @@ class Model:
         
         if theta.ndim == 1:
             theta = theta[:,None]
-
+        
         g = np.zeros_like(theta)
         for d in data:
-            Phi = self.get_PHI(d)
-            g += self.t_gradient_func(Phi, theta, self.n_nodes)[0]
+            d_prime = copy.deepcopy(d)
+            phi = self.get_phi(d)
+            for i in xrange(self.n_nodes):
+                d_prime[i] = 1 if d[i] == 0 else 0
+                phi_p = self.get_phi(d_prime)
+                t = self.T[i]
+                d_prime[i] = d[i]
+                g += self.t_gradient_func(phi, phi_p, theta, t)[0]
         
         return (-1. * g.flatten()) / len(data)
 
@@ -139,7 +168,7 @@ class Model:
 
 
 
-def train_model_cg(minibatch = 250, n_samples = 2500, n_test_samples = 500, cg_max_iter = 3):
+def train_model_cg(minibatch = 25, n_samples = 50, n_test_samples = 50, cg_max_iter = 3):
     import grid_world
     
     #m = Model(81, 2, 81)
@@ -165,8 +194,14 @@ def train_model_cg(minibatch = 250, n_samples = 2500, n_test_samples = 500, cg_m
                                 fprime = m.pseudo_likelihood_grad, 
                                 args = (mb,), 
                                 full_output = True,
+                                epsilon=1.e-12,
                                 gtol = 1e-180,
+
                                 maxiter = cg_max_iter)
+
+        print 'theta: ', n_theta
+
+        print 'theta sum: ', np.sum(n_theta)
         
         delta = np.linalg.norm(n_theta - m.theta)
         
