@@ -3,7 +3,7 @@ import numpy
 import scipy.sparse
 import scipy.optimize
 from random import choice
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 class GridWorld:
     ''' Grid world environment. State is represented as an (x,y) array and 
