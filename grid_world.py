@@ -177,7 +177,7 @@ class RandomPolicy:
 
 class MDP:
     
-    def __init__(self, environment=None, policy=None):
+    def __init__(self, environment=None, policy=None, walls_on = True):
         self.env = environment
         self.policy = policy
 
@@ -192,8 +192,9 @@ class MDP:
             #goals[size-pos-buff:size-pos+buff, size-pos-buff:size-pos+buff] = 1
 
             walls = numpy.zeros((size,size))
-            walls[size/2, :] = 1
-            walls[size/2, size/2] = 0 
+            if walls_on:
+                walls[size/2, :] = 1
+                walls[size/2, size/2] = 0 
 
             self.env = GridWorld(walls, goals)
 

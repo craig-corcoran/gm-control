@@ -37,17 +37,16 @@ class Model:
         # theta_s,j = |chi| * s + j
         # theta_edge,j,k = |chi|*|V| + (|chi|^2)*edge + |chi|*j + k
         #self.theta = csc_matrix( (self.n_params,1), dtype=np.float)
-        self.theta = np.zeros((self.n_params,1))
-    
+        #self.theta = np.zeros((self.n_params,1), dtype = np.float)
+        self.theta = np.random.standard_normal((self.n_params, 1))
+
         t_Phi = theano.sparse.csr_matrix('Phi', dtype='int8')
         t_theta = T.dmatrix('theta')
         t_n_nodes = T.iscalar('n_nodes')
         t_g = theano.sparse.structured_dot(t_Phi.T, t_theta)
 
         t_likelihood =  t_n_nodes * t_g[0,0] - T.sum( T.log( T.exp(T.repeat(t_g[0,0], t_n_nodes)) + T.exp(t_g[1:,0]))) 
-
-        print t_likelihood.type
-        
+ 
         self.t_likelihood_func = theano.function([t_Phi, t_theta, t_n_nodes], t_likelihood)
         
         t_likelihood_gradient = T.grad(t_likelihood, [t_theta])
@@ -75,202 +74,143 @@ class Model:
         for indx,e in enumerate(self.edges):
             phi[2 * self.n_nodes + indx*4 + 2*d[e[0]] + d[e[1]], 0] = 1
         return phi
-            
 
-    def new_pseudo_likelihood(self, data, theta):
-        ''' data is a list of lists where each inner list is a assigment of
-        values to all of the nodes'''
-
-        l = 0.
-        for d in data:
-            
-            n_nz_col = self.n_nodes + self.n_edges    # number of nonzeros per column in PHI
-            n_nz = n_nz_col * self.n_nodes # total number of nonzeros in PHI
-            #Phi = csc_matrix( (self.n_params,self.n_nodes+1), dtype=np.int8)
-            #Phi[:,0] = self.get_phi(d)
-            rows = np.zeros( n_nz, dtype = np.int32)
-            cols = np.zeros( n_nz, dtype = np.int32)
-            vals = np.ones( n_nz, dtype = np.int8)
-
-
-            rows[:n_nz_col] = self.get_phi_indexes(d)
-            cols[:n_nz_col] = 0
-            d_prime = copy.deepcopy(d)            
-            for i in xrange(self.n_nodes):
-                d_prime[i] = 1 if d[i] == 0 else 0
-                rows[i*n_nz_col:(i+1)*n_nz_col] = self.get_phi_indexes(d)
-                cols[i*n_nz_col:(i+1)*n_nz_col] = i+1
-                d_prime[i] = d[i]
-                
-            Phi = scipy.sparse.coo_matrix((vals,(rows,cols)), shape=(self.n_params,self.n_nodes+1))
-            Phi = scipy.sparse.csr_matrix(Phi)
-            
-            # g = <|V| + 1>
-            g = Phi.T.dot(theta).flatten()
-            
-            # TODO for example only, remove
-            print self.t_likelihood_func(Phi, theta, self.n_nodes)
-            print self.t_gradient_func(Phi, theta, self.n_nodes)[0].shape
-            
-            l += self.n_nodes * g[0] - np.sum(np.log(np.exp(np.repeat(g[0], self.n_nodes)) + np.exp(g[1:])))
-        return l / data.shape[0]
-                
-    def pseudo_likelihood(self, data, theta):
-        ''' data is a list of lists where each inner list is a assigment of
-        values to all of the nodes'''
-
-        l = 0.
-        for d in data:
-            # Ensure d is a list of length |V| whose values are in Chi
-            assert(len(d) == self.n_nodes)
-            for i in d:
-                assert(i in self.chi)
-
-            #Phi = csc_matrix( (self.n_params,self.n_nodes+1), dtype=np.int8)
-            #Phi[:,0] = self.get_phi(d)
-            Phi = hstack( [self.get_phi(d)], format='csc')
-            d_prime = copy.deepcopy(d)
-            for i in xrange(self.n_nodes):
-                d_prime[i] = 1 if d[i] == 0 else 0
-                Phi = hstack( [Phi, self.get_phi(d_prime)], format='csc', dtype=np.int8)
-                #Phi[:,i+1] = self.get_phi(d_prime)
-                d_prime[i] = d[i]
-            
-            # g = <|V| + 1>
-            g = Phi.T.dot(theta)
-
-            l += self.n_nodes * g[0] - np.sum(np.log(np.exp(np.repeat(g[0], self.n_nodes)) + np.exp(g[1:])))
-        return l / data.shape[0]
-
-
-    # def grad_pseudo_likelihood(self, theta, data):
-    #     grad = []
-    #     for key in theta.keys():
-    #         if len(key) == 2:   # Node theta
-    #             grad.append(self.grad_pseudo_likelihood_nodewise(key,theta,data))
-    #         elif len(key) == 4: # Edge theta
-    #             grad.append(self.grad_pseudo_likelihood_edgewise(key,theta,data))
-    #         else:
-    #             assert(False)
-    #     return grad
-
-    # def grad_pseudo_likelihood_nodewise(self, key, theta, data):
-    #     ''' Gradient W.R.T. node s taking value j '''
-    #     assert(len(key) == 2)
-    #     s = key[0]
-    #     j = key[1]
-
-    #     grad = 0.
-    #     for d in data:
-    #         if d[s] == j:
-    #             grad += 1
-
-    #         alpha = theta[(s,j)]
-    #         for t in self.neighbors[s]:
-    #             alpha += theta[(s,t,j,d[t])] if s<t else theta[(t,s,d[t],j)]
-    #         alpha = np.exp(alpha)
-
-    #         alpha_denom = 0.
-    #         for J in self.chi:
-    #             b = theta[(s,J)]
-    #             for t in self.neighbors[s]:
-    #                 b += theta[(s,t,J,d[t])] if s<t else theta[(t,s,d[t],J)]
-    #             alpha_denom += np.exp(b)
-
-    #         grad -= alpha / alpha_denom
-            
-    #     return grad
-
-    # def grad_pseudo_likelihood_edgewise(self, key, theta, data):
-    #     ''' Gradient W.R.T. egde s,t taking value j,k '''
-    #     assert(len(key) == 4)
-    #     s = key[0]
-    #     t = key[1]
-    #     j = key[2]
-    #     k = key[3]
+    def get_PHI(self, d):
         
-    #     grad = 0.
-    #     for d in data:
-    #         if d[s] == j and d[t] == k:
-    #             grad += 2
-                
-    #             # First set of alphas
-    #             alpha = theta[(t,k)]
-    #             for T in self.neighbors[t]:
-    #                 alpha += theta[(t,T,k,d[T])] if t<T else theta[(T,t,d[T],k)]
-    #             alpha = np.exp(alpha)
+        n_nz_col = self.n_nodes + self.n_edges    # number of nonzeros per column in PHI
+        n_nz = n_nz_col * self.n_nodes # total number of nonzeros in PHI
+        #Phi = csc_matrix( (self.n_params,self.n_nodes+1), dtype=np.int8)
+        #Phi[:,0] = self.get_phi(d)
+        rows = np.zeros( n_nz, dtype = np.int32)
+        cols = np.zeros( n_nz, dtype = np.int32)
+        vals = np.ones( n_nz, dtype = np.int8)
 
-    #             alpha_denom = 0.
-    #             for J in self.chi:
-    #                 b = theta[(t,J)]
-    #                 for T in self.neighbors[t]:
-    #                     b += theta[(t,T,J,d[T])] if t<T else theta[(T,t,d[T],J)]
-    #                 alpha_denom += np.exp(b)
 
-    #             grad -= alpha / alpha_denom
-
-    #             # Second set of alphas
-    #             alpha = theta[(s,j)]
-    #             for T in self.neighbors[s]:
-    #                 alpha += theta[(s,T,j,d[T])] if s<T else theta[(T,s,d[T],j)]
-    #             alpha = np.exp(alpha)
-
-    #             alpha_denom = 0.
-    #             for J in self.chi:
-    #                 b = theta[(s,J)]
-    #                 for T in self.neighbors[s]:
-    #                     b += theta[(s,T,J,d[T])] if s<T else theta[(T,s,d[T],J)]
-    #                 alpha_denom += np.exp(b)
-
-    #             grad -= alpha / alpha_denom
+        rows[:n_nz_col] = self.get_phi_indexes(d)
+        cols[:n_nz_col] = 0
+        d_prime = copy.deepcopy(d)            
+        for i in xrange(self.n_nodes):
+            d_prime[i] = 1 if d[i] == 0 else 0
+            rows[i*n_nz_col:(i+1)*n_nz_col] = self.get_phi_indexes(d_prime)
+            cols[i*n_nz_col:(i+1)*n_nz_col] = i+1
+            d_prime[i] = d[i]
             
-    #     return grad
+        Phi = scipy.sparse.coo_matrix((vals,(rows,cols)), shape=(self.n_params,self.n_nodes+1))
+        return scipy.sparse.csr_matrix(Phi)
+            
 
-    # def learn(self, data):
-    #     ''' Attempts to find the self.theta maximizing the pseudo likelihood'''
-    #     x0 = 
-    #     scipy.optimize.fmin(pseudo_likelihood,
+    def pseudo_likelihood(self, theta, data):
+        ''' data is a list of lists where each inner list is a assigment of
+        values to all of the nodes - returns negative sum of log psl over the 
+        data'''
+
+        if theta.ndim == 1:
+            theta = theta[:,None]
+
+        l = 0.
+        for d in data:
+            Phi = self.get_PHI(d)
+            l += self.t_likelihood_func(Phi, theta, self.n_nodes)
+        
+        return (-1. * l) / len(data)
+
+    def pseudo_likelihood_grad(self, theta, data):
+        
+        if theta.ndim == 1:
+            theta = theta[:,None]
+
+        g = np.zeros_like(theta)
+        for d in data:
+            Phi = self.get_PHI(d)
+            g += self.t_gradient_func(Phi, theta, self.n_nodes)[0]
+        
+        return (-1. * g.flatten()) / len(data)
+
+    def get_data(self, mdp, n_samples, n_test_samples, state_rep = 'factored'):
+    
+        all_data = mdp.sample_grid_world(n_samples + n_test_samples, state_rep )
+        np.random.shuffle(all_data)
+
+        data = all_data[:n_samples]
+        test_data = all_data[n_samples:]
+
+        return data, test_data
+                
 
 
-def main():
+
+def train_model_cg(minibatch = 250, n_samples = 2500, n_test_samples = 500, cg_max_iter = 3):
     import grid_world
-    import time
-
-    a = Model(18, 2, 18)
+    
+    #m = Model(81, 2, 81)
+    m = Model(18, 2, 18)
 
     print 'Generating Samples Trajectory from Gridworld...'
-    start = time.time()
     mdp = grid_world.MDP()
-    data = mdp.sample_grid_world(25)
-    elapsed = (time.time() - start)
-    print elapsed, 'seconds'
+    data, test_data = m.get_data(mdp, n_samples, n_test_samples,  
+                                        state_rep = 'factored')
+    n_iters = n_samples / minibatch
 
-    # data = []
-    # for i in range(5):
-    #     data.append(np.random.randint(2, size=a.n_nodes))
+    print 'initial loss: ', m.pseudo_likelihood(m.theta, test_data)
 
-    print 'Computing Pseudo-Likelihood...'
-    start = time.time()
-    val = a.new_pseudo_likelihood(data, a.theta)
+    for i in xrange(n_iters):
 
-    elapsed = (time.time() - start)
-    print elapsed, 'seconds'
+        print 'iter: ', i+1, ' of ', n_iters
 
-    print val
-    print np.exp(val)
+        mb = data[i*minibatch: (i+1)*minibatch]
 
-    # alpha = -.2
-    # for i in xrange(10):
-    #     print a.pseudo_likelihood(data, a.theta)
+        n_theta, val, fc, gc, w = scipy.optimize.fmin_cg(
+                                m.pseudo_likelihood,
+                                m.theta,
+                                fprime = m.pseudo_likelihood_grad, 
+                                args = (mb,), 
+                                full_output = True,
+                                gtol = 1e-180,
+                                maxiter = cg_max_iter)
+        
+        delta = np.linalg.norm(n_theta - m.theta)
+        
+        print 'function calls', fc
+        print 'gradient calls', gc 
+        print 'delta theta: ', delta 
 
-    #     grad = a.grad_pseudo_likelihood(a.theta, data)
-    #     indx = 0
-    #     for key in a.theta.keys():
-    #         a.theta[key] += alpha * grad[indx]
-    #         indx += 1
-            
+        m.theta = n_theta
+        print 'current training min: ', val
+        print 'new test loss: ', m.pseudo_likelihood(m.theta, test_data)
+
+        if delta < 1e-20:
+            break
+
+    return m
+
+
+def train_model_sgd( minibatch = 250, n_samples = 2500, n_test_samples =500, alpha = 1e-1):
     
+    import grid_world
+    
+    #m = Model(81, 2, 81)
+    m = Model(18, 2, 18)
+
+    print 'Generating Samples Trajectory from Gridworld...'
+    mdp = grid_world.MDP()
+    data, test_data = m.get_data(mdp, n_samples, n_test_samples,  
+                                        state_rep = 'factored')
+    n_iters = n_samples / minibatch
+
+    print 'initial loss: ', m.pseudo_likelihood(m.theta, test_data)
+
+    for i in xrange(n_iters):
+        
+        alpha *= 0.9
+        
+        mb = data[i*minibatch: (i+1)*minibatch]
+
+        m.theta -= alpha * m.pseudo_likelihood_grad(m.theta, mb)[:,None]
+        
+        print 'new loss: ', m.pseudo_likelihood(m.theta, test_data)
+    
+    return m
 
 
 if __name__ == "__main__":
-    main()
+    train_model_cg()
