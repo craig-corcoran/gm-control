@@ -25,11 +25,24 @@ University of Texas at Austin\\
 \maketitle
 
 \begin{abstract}
+  This paper explores a novel method of learning and control in Markov Decision Processes (MDPs). Most Reinforcement Learning algorithms employ variants of the Bellman equations to maximize expected long-term reward. In contrast, this work applies graphical model learning and inference to the problem of Inverse Reinforcement Learning (IRL), in which sample trajectories are provided as input to the agent and the goals is to 
 
+to this work reduces finite timesteps in the MDP to Markov Random Fields. Inference and 
 \end{abstract}
 
 \section{Introduction}
-This is an intro
+This is our intro
+
+\section{Related Work}
+Imitation learning refers to the setting in which an agent learns from information provided by an expert. Ideally, imitation learning leads to faster learning when the expert acts according to an optimal policy than when the agent tries to learn the task in the absence of an expert. Imitating a suboptimal teacher may slow learning, but should not prevent the student from surpassing the teacher's performance in the long run.
+
+Several imitation learning approaches have been pioneered: some of the simplest involve applying standard reinforcement value function updated algorithms such as Q-Learning to the teacher's experience in order to provide the learning with a good initial value function estimate \cite{whitehead91,price01}. 
+
+Another way of doing imitation learning is to introduce shaping rewards. Shaping rewards are intermediate rewards not present in the original MDP that are provided to the agent by an expert to speed up learning. Specifically, shaping rewards are designed to aid learning in cases where there is a long sequence of unrewarded actions to reach a reward state. In such cases, shaping rewards can create a ``progress indicator'' guiding the agent through such challenging sequences. Importantly, Ng et al. proved that an arbitrary externally specified shaping reward function could be included in a reinforcement learning system without modifying its optimal policy \cite{ng99}. Subsequently Konidaris et al. introduced a method for learning shaping rewards \cite{konidaris06}.
+
+Inverse Reinforcement Learning is the problem of inferring a reward function for an unknown MDP given observed, optimal behavior. Ng and Russell construct an efficiently solvable linear program formulation of the IRL problem \cite{ng00}.
+
+Apprenticeship Learning considers the problem of learning in a MDP where the reward function is not given. Instead the agent observes an expert demonstrating the task. Abbeel and Ng assume the expert is trying to maximize a reward function expressed as a linear combination of known features \cite{abbeel04}. 
 
 \bibliography{gm-control}
 \bibliographystyle{plain}
