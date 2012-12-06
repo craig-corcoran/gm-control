@@ -65,6 +65,8 @@ Inverse Reinforcement Learning is the problem of inferring a reward function for
 
 Apprenticeship Learning considers the problem of learning in a MDP where the reward function is not given. Instead the agent observes an expert demonstrating the task. Abbeel and Ng assume the expert is trying to maximize a reward function expressed as a linear combination of known features \cite{abbeel04}. Apprenticeship learning differs from imitation learning in that imitation learning still assumes the existence of a reward function.
 
+Finally, the problem of stochastic optimal control, closely related to that of reinforcement learning, has been studied from the perspective of KL divergence minimization. Formulating the MDP graph as a Bayes Net allows the direct application of Bayesian inference methods to yield risk sensitive control \cite{rawlik10,tousaint06}.
+
 \section{Exponential Family}
 In order to apply exponential family learning to a Markov Decision Processes, it must first be converted into a suitable graph representation. Figure \ref{fig:structure} shows the conversion of a single MDP time step, experience, or $(S,A,R,S')$ tuple into a Markov Random Field. 
 
@@ -233,7 +235,7 @@ Beyond learning the parameters of the model, it is necessary to use the model fo
 
 \section{Control}
 
-Control in reinforcement learning typically involves to finding a policy which maximizes the long term gamma discounted sum of rewards. However, since pure imitation learning focuses instead on mimicing the expert's policy, the task becomes a supervised one where the agent is trained on $(S,R,S')$ instances whose labels are the expert's actions. While training in exponential families does not involve explicitly differentiating subsets of variables as classification labels, the underlying principles are similar. During evaluation, the objective is to identify the action that the expert would most likely have taken. Fortunately, this graphical models have a natural way to perform this estimation task. The Maximum a Posteriori or MAP configuration refers to the maximally likely assignment of values to the sufficient statistics in the case of exponential families or nodes in the case of graphical models.
+Control in reinforcement learning typically involves to finding a policy which maximizes the long term gamma discounted sum of rewards. However, since pure imitation learning focuses instead on mimicing the expert's policy, the task becomes a supervised one where the agent is trained on $(S,R,S')$ instances whose labels are the expert's actions. While training in exponential families does not involve explicitly differentiating subsets of variables as classification labels, the underlying principles are similar. During evaluation, the objective is to identify the action that the expert would most likely have taken. Fortunately, graphical models have a natural way to perform this estimation task: the Maximum a Posteriori or MAP configuration refers to the maximally likely assignment of values to the sufficient statistics in the case of exponential families or nodes in the case of graphical models.
 
 
 \section{Results - Control}
@@ -241,27 +243,31 @@ Control in reinforcement learning typically involves to finding a policy which m
 \section{Future Work}
 There are many avenues of future work. One of the first possibilities would involve extending the graphical model to include more than a single time step in the MDP. Full trajectories could encompass arbitrarily man timesteps so graph size is theoretically unbounded. However, the discount factor $\gamma$ specifies a horizon beyond which rewards matter little. Therefore it would likely be possible to compute, given a setting for $\gamma$, the minimum size of the graph necessary to ensure learning converges within some constant factor of optimality. 
 
-Another promising avenue of future work is to introduce a hidden component to the graph. 
-\begin{tikzpicture}[scale=.5,every node/.style={rectangle,draw}]
-  \node (n6) at (1,5) {S};
-  \node (n4) at (3,3) {A};
-  \node (n0) at (1,3) {h};
-  \node (n5) at (3,5) {S'};
-  \node (n1) at (1,1) {R};
-  \path[every node/.style={font=\sffamily\small}]
-  (n0) edge (n1)
-  edge (n1)
-  edge (n5)
-  edge (n4)
-  edge (n6);
-\end{tikzpicture}
+Another promising avenue of future work is to introduce a hidden component to the graph:
+
+\makebox[\textwidth][c]{
+  \centering
+  \begin{tikzpicture}[scale=.5,every node/.style={rectangle,draw}]
+    \node (n6) at (1,5) {S};
+    \node (n4) at (3,3) {A};
+    \node (n0) at (1,3) {h};
+    \node (n5) at (3,5) {S'};
+    \node (n1) at (1,1) {R};
+    \path[every node/.style={font=\sffamily\small}]
+    (n0) edge (n1)
+    edge (n1)
+    edge (n5)
+    edge (n4)
+    edge (n6);
+  \end{tikzpicture}
+}
 
 This hidden component could include various amounts of representational power by varying the number and topology the nodes contained within. 
 
 Another interesting vein of future work is to apply algorithms developed in the deep learning community to the graphical structure described in Figure \ref{fig:structure}. Because of the connectivity each cluster of nodes forms a fully connected bipartite graph with every other cluster. This structure is identical to that found in Restricted Boltzmann Machines, the building blocks of deep nets. Extensive work has been already done in the deep learning community to develop efficient algorithms for learning and inference in the deep nets. Algorithms such as Contrastive Divergence \cite{hinton02} apply directly to the topology of this problem. 
 
 \section{Discussion and Conclusion}
-
+This work applied graphical model and exponential family algorithms to the problem of pure imitation learning in Markov Decision Processes. It was demonstrated that the graph structure of a single MDP timestep could be decomposed into a Markov Random Field. Given a collection of data from an expert, this paper described the application of the psuedolikelihood approximation for estimating the likelihood of arbitrary graph configurations. Combining this likelihood estimation procedure with an automatically derived gradient, allowed the efficient use of conjugate descent to learn parameters to maximizing the likelihood of the training data. Learned parameters were empirically shown to successfully increase the likelihood of on-policy samples when compared to to random samples. Subsequently, control could be performed through inferring the Maximum a Posteriori (MAP) configuration of variables in the graph for the current timestep. The resulting policy was shown to excel at recreating the expert's policy even when provided with samples far fewer than the number of possible states in the system. 
 
 \bibliography{gm-control}
 \bibliographystyle{plain}
