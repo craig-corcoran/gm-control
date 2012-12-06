@@ -191,7 +191,7 @@ Computing the likelihood of an assignment $X$ to the variables in the graph is a
 \end{equation}
 
 \begin{equation}
-\textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \frac{p(X = X^t)}{\sum_{j \in \chi} p(x_i = j, X_{V\setminus i} = X_{V\setminus i}^t)}
+\textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \textrm{log}\frac{p(X = X^t)}{\sum_{j \in \chi} p(x_i = j, X_{V\setminus i} = X_{V\setminus i}^t)}
 \label{eqn:pseudologlikelihood}
 \end{equation}
 
