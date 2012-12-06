@@ -231,8 +231,9 @@ Figure \ref{fig:learning} compares the Average un-normalized probability of data
 
 Beyond learning the parameters of the model, it is necessary to use the model for control.
 
-\section{MAP Inference}
+\section{Control}
 
+Control in reinforcement learning typically involves to finding a policy which maximizes the long term gamma discounted sum of rewards. However, since pure imitation learning focuses instead on mimicing the expert's policy, the task becomes a supervised one where the agent is trained on $(S,R,S')$ instances whose labels are the expert's actions. While training in exponential families does not involve explicitly differentiating subsets of variables as classification labels, the underlying principles are similar. During evaluation, the objective is to identify the action that the expert would most likely have taken. Fortunately, this graphical models have a natural way to perform this estimation task. The Maximum a Posteriori or MAP configuration refers to the maximally likely assignment of values to the sufficient statistics in the case of exponential families or nodes in the case of graphical models.
 
 
 \section{Results - Control}
