@@ -45,7 +45,7 @@ Where $0 \le \gamma < 1$ is the discount factor which determines how much immedi
 \subsection{Imitation Learning}
 Imitation learning refers to the setting in which an agent learns from information provided by an expert. We introduce two different variants of imitation learning: \textit{Seeded Imitation Learning} and \textit{Pure Imitation Learning}. In the seeded imitation learning case, the agent is ``seeded'' with experience from the expert. This experience informs the agent's initial policy, however the goal of seeded imitation learning remains the same -- find $\pi^*$. Thus the expert information provided may be useful in speeding up the learning process, but the ultimate policy reached in the domain should be the same regardless of what information is provided by the expert. Pure Imitation Learning, in contrast, challenges the agent to find a policy which best mimics the inferred policy of the expert as observed by the provided information. This optimal policy for pure imitation learning may not match the optimal policy for the MDP. In fact, the two policies would only be guaranteed to match in the case that the expert is acting under the optimal MDP policy and has provided enough information to the agent to fully recreate its policy.
 
-Formally, pure imitation learning assumes the existence of an expert whose actions are governed by a policy $\bar{\pi}$. The expert provides information in the form of samples of its policy to the agent. Specifically, let $D$ be a set of experiences sampled from $\bar\pi$, where each experience is a tuple $(s,a,r,s')$ indicating the action the expert performed in a given state as well as the reward received and the state subsequently experienced. Note that these experiences may form coherent trajectories in the MDP or may be disjoint experiences. Given $D$ the goal of the agent is to infer $\bar{\pi}$.
+Formally, pure imitation learning assumes the existence of an expert whose actions are governed by a policy $\bar{\pi}$. The expert provides information in the form of samples of its policy to the agent. Specifically, let $X_1^n$ be a set of $n$ experiences sampled from $\bar\pi$, where each experience is a tuple $(s,a,r,s')$ indicating the action the expert performed in a given state as well as the reward received and the state subsequently experienced. Note that these experiences may form coherent trajectories in the MDP or may be disjoint experiences. Given $X_1^n$ the goal of the agent is to infer $\bar{\pi}$.
 
 \section{Motivation}
 Imitation learning as a whole is motivated from domains in which reward is sparse or unknown. Sparse rewards present a challenge to many reinforcement learning agents because they fail to provide an observable gradient for policy improvement. Furthermore, many RL algorithms in the absence of any reward will revert to random exploration -- which can require arbitrary amounts of time to reach a reward state for the first time. To illustrate this point consider the case of an MDP defined over a Markov chain of length $n$ where each state $0...n$ transitions to the adjacent state $n+1$ or $n-1$ when the actions right and left are taken. Additionally assume the agent starts in state $n/2$ and receives reward only upon reaching state $0$ or state $n$. Under a random exploration policy, the expected amount of time to reach either reward state exponentially grows as a function of $n$. In such a case, the ability to receive information from an expert could greatly reduce the time required to learn an optimal policy. 
@@ -118,7 +118,14 @@ An exponential family may be defined over the graph in Figure \ref{fig:structure
 \label{eqn:exp-family}
 p(x;\theta)
 =
-exp\left\{\sum_{s \in V}\theta_{s;j}(X_s) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s,X_t) - A(\theta)\right\}
+\textrm{exp}\left\{\sum_{s \in V}\theta_{s;j}(X_s) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s,X_t) - A(\theta)\right\}
+\end{equation}
+
+\begin{equation}
+\label{eqn:normalization}
+A(\theta)
+=
+\textrm{log} \sum_{X \in \chi^m} \textrm{exp}\left\{\sum_{s \in V}\theta_{s;j}(X_s) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s,X_t)\right\}
 \end{equation}
 
 \noindent\begin{minipage}{.4\linewidth}
@@ -168,24 +175,92 @@ The experimental domain selected was a 9x9 gridworld pictured in Figure \ref{fig
 \label{fig:gridworld}
 \end{figure}
 
+\subsection{Graph Instantiation}
+More than simply specifying the dynamics of the domain, the particular state, action, and reward representation used must also be determined. The state of the system is fully described by the agents $(x,y)$ location in the world. This state is represented using 9 binary nodes to indicate which row the agent currently occupies and 9 binary nodes to represent the agent's current column. Hence at any point in time exactly two of the state variables are active. Each of the four directional actions is encoded using using two binary nodes whose joint configuration specifies which action is to be taken (eg $0,0=\leftarrow, 0,1=\rightarrow, 1,0=\uparrow, 1,1=\downarrow$). Rewards are encoded with using only a single binary node which is active when the agent reaches the goal state and inactive otherwise. When converted into the graphical representation described in Figure \ref{fig:structure}, the resulting graph contains a total of 39 vertexes (18 state nodes, 18 next state nodes, 2 action nodes, and a single reward node), and 416 edges. Parameterizing this graph according to the exponential family given in Equation \ref{eqn:exp-family} using a binary $\chi$ yields a total of 1742 indicator function sufficient statistics and parameters.
+
+Having specified the dynamics of the MDP as well as its graphical instantiation, of interest now is the method used to learn parameters from data.
+
+\section{Likelihood Approximation}
+Computing the likelihood of an assignment $X$ to the variables in the graph is a key step underlying both learning and control. The computational complexity associated with this operation stems from the normalization constant $A(\theta)$ in Equation \ref{eqn:normalization}. This constant sums over all $2^{1742}$ possible configurations of the sufficient statistics in the case of the graph representation described above. The intractability of explicitly computing $A(\theta)$ necessitates the use of approximation schemes. Pseudo-likelihood is one such approximation scheme which has the advantage of computationally tractable while still converging to the optimal $\theta$s as the number of data samples approaches infinity \cite{besag75}. Pseudo-likelihood approximates the probability of a data sample $X^t$ under the current parameters $\theta$ as the product of individual probabilities taken over the sufficient statistics of the model. While equation \ref{eqn:pseudolikelihood} expresses the pseudolikelihood, typically the log of this quantity is used in practice (Equation \ref{eqn:pseudologlikelihood}). Pseudolikelihood sidesteps the problem of computing the normalization constant because $A(\theta)$ occurs both in the numerator and denominator of Equation \ref{eqn:pseudologlikelihood} and thus cancels.
+
+\begin{equation}
+\tilde{p}(X^t,\theta) = \prod_{i=1}^{|\phi|} p(X_i = x_i^t | X_{V\setminus i} = X_{V\setminus i}^t) 
+\label{eqn:pseudolikelihood}
+\end{equation}
+
+\begin{equation}
+\textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \frac{p(X = X^t)}{\sum_{j \in \chi} p(x_i = j, X_{V\setminus i} = X_{V\setminus i}^t)}
+\label{eqn:pseudologlikelihood}
+\end{equation}
+
+%% \begin{equation}
+%% \textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \frac{\textrm{exp}\{\sum_{s \in V}\theta_{s;j}(X_s^t) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s^t,X_t^t)\}} {\sum_{j \in \chi}\textrm{exp}\{\sum_{s \in V}\theta_{s;j}(X_s=j) + \sum_{(s,t) \in E} \theta_{st;jk}(X_i=j,X_t^t)\}}
+%% \label{eqn:fullpsuedolikelihood}
+%% \end{equation}
+
+\subsection{Optimizations to Pseudo-Likelihood}
+Craig do you want to put some of your derived likelihood equations here?
+
+Efficient likelihood approximation paves the way for tractable learning and inference, as discussed in the next section.
 
 \section{Learning Thetas}
-Unfortunately, the graph is not triangulated.
+Learning parameters of exponential families is an area of ongoing research in the graphical model community. The formal problem definition is as follows: given a collection of fully observed data $X_1^n := {X^1...X^n}$ where each $X^i$ is a vector specifying a complete assignment of values to the sufficient statistics in the exponential family, find an assignment to the values of the unknown parameter vector $\theta$ maximizing the likelihood of the data. This is equivalent to maximizing the log of the likelihood (approximated here using the pseudolikelihood), given in Equation \ref{eqn:mle}.
 
-\subsection{Pseudo-likelihood Approximation}
+\begin{equation}
+\arg\max_\theta \ell(\theta,X_i^n)
+=
+\left\{
+  \frac{1}{\textrm{n}}\sum_{i=1}^{n}\textrm{log}\tilde{p}(X^i; \theta)
+\right\}
+\label{eqn:mle}
+\end{equation}
 
-\subsection{Automatic Derivation}
+Wainright et al. describe a closed form solution for deriving the maximum likelihood estimate of $\theta$ \cite{wainwright08}. Unfortunately it is only applicable to triangulated graphs. While the cluster graph shown in Figure \ref{fig:mrf} is triangulated, the complete graph contains chordless cycles between adjacent layers such as Figure \ref{fig:decomp}. As a result, an iterative method must be used to learn the optimal $\theta$s. However, a gradient of the objective function is required for most efficient optimization methods. The gradient of the pseudolikelihood with respect to $\theta$ is computed using automatic differentiation in Theano \cite{bergstra10} and minimize using iterative conjugate gradient \cite{hestenes52}. 
 
 \section{Results - Learning}
+50 data samples were collected from an optimal agent on the 9x9 gridworld. These data samples were divided into 2 mini-batches of size 25, with another 50 samples set apart for evaluation. Training took place iteratively over the mini batches using conjugate gradient.
+
+Figure \ref{fig:learning} compares the Average un-normalized probability of data samples from the optimal agent as well as those sampled from a random agent. The increased likelihood of the on-policy samples demonstrates that the learned model does indeed favor trajectories resembling the ones against which it has been trained.
+
+\begin{figure}[htp]
+  \centering
+  \includegraphics[width=.8\textwidth]{figures/graph.png}
+  \caption{Log-scaled probability of the data samples generated from a random policy and an optimal policy. This indicates that the learned model favors data generated from the optimal policy (on which it was trained) to random samples.}
+  \label{fig:learning}
+\end{figure}
+
+Beyond learning the parameters of the model, it is necessary to use the model for control.
 
 \section{MAP Inference}
+
+
 
 \section{Results - Control}
 
 \section{Future Work}
-Learning from more than a single timestep of experience. 
-Try out deep learning algorithms on this graph structure.
+There are many avenues of future work. One of the first possibilities would involve extending the graphical model to include more than a single time step in the MDP. Full trajectories could encompass arbitrarily man timesteps so graph size is theoretically unbounded. However, the discount factor $\gamma$ specifies a horizon beyond which rewards matter little. Therefore it would likely be possible to compute, given a setting for $\gamma$, the minimum size of the graph necessary to ensure learning converges within some constant factor of optimality. 
+
+Another promising avenue of future work is to introduce a hidden component to the graph. 
+\begin{tikzpicture}[scale=.5,every node/.style={rectangle,draw}]
+  \node (n6) at (1,5) {S};
+  \node (n4) at (3,3) {A};
+  \node (n0) at (1,3) {h};
+  \node (n5) at (3,5) {S'};
+  \node (n1) at (1,1) {R};
+  \path[every node/.style={font=\sffamily\small}]
+  (n0) edge (n1)
+  edge (n1)
+  edge (n5)
+  edge (n4)
+  edge (n6);
+\end{tikzpicture}
+
+This hidden component could include various amounts of representational power by varying the number and topology the nodes contained within. 
+
+Another interesting vein of future work is to apply algorithms developed in the deep learning community to the graphical structure described in Figure \ref{fig:structure}. Because of the connectivity each cluster of nodes forms a fully connected bipartite graph with every other cluster. This structure is identical to that found in Restricted Boltzmann Machines, the building blocks of deep nets. Extensive work has been already done in the deep learning community to develop efficient algorithms for learning and inference in the deep nets. Algorithms such as Contrastive Divergence \cite{hinton02} apply directly to the topology of this problem. 
+
 \section{Discussion and Conclusion}
+
 
 \bibliography{gm-control}
 \bibliographystyle{plain}
