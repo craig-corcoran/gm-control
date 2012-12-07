@@ -34,6 +34,10 @@ class Model:
         self.n_params = self.n_nodes*len(self.chi) + self.n_edges*len(self.chi)*len(self.chi)
 
         self.n_nz_phi = self.n_nodes + self.n_edges
+        self.sparse_identity = scipy.sparse.coo_matrix( (np.ones(self.n_params), (np.arange(self.n_params), np.arange(self.n_params))),
+                                                shape = (self.n_params, self.n_params),
+                                                dtype = np.int8)
+        self.sparse_identity = scipy.sparse.csr_matrix(self.sparse_identity)
         
         # Theta = <node-wise params, edge-wise params>
         # theta_s,j = |chi| * s + j
@@ -69,6 +73,7 @@ class Model:
         t_phi_p = theano.sparse.csr_matrix('phi_p', dtype='int8')
         t_theta = T.dmatrix('theta')
 
+        
         t_T = theano.sparse.csc_matrix('T', dtype='int8')
 
         t_phi_i = theano.sparse.structured_dot(t_T, t_phi)
@@ -88,19 +93,20 @@ class Model:
         phi_p_indxs = T.ivector('phi_p_indxs')
         cols = T.ivector('cols') # of tranformation matrix
         rows = T.ivector('rows')
-        #zero = T.iscalar('zero')
+        t_sparse_identity = theano.sparse.csc_matrix('sp_ident', dtype='int8')
         
         # first we need a function to transform the outer loops iterables into 
         # the tensors used by var_likelihood_func.
-        c1,_ = theano.scan(fn = self.set_index,
+        c1,_ = theano.scan(fn = self.add_index,
                             outputs_info = T.zeros((n_params,1), dtype='int8'), #theano.sparse.csr_from_dense(
                             sequences = phi_p_indxs,
-                            non_sequences = 0)
+                            non_sequences = [0, t_sparse_identity, (n_params,1)])
         phi_p = c1[-1]
         
-        c2,_ = theano.scan(fn = self.set_index,
+        c2,_ = theano.scan(fn = self.add_index,
                             outputs_info = theano.sparse.csr_from_dense(T.zeros((n_ind, n_params), dtype='int8')),
-                            sequences = [rows[:n_ind], cols[:n_ind]])
+                            sequences = [rows[:n_ind], cols[:n_ind]],
+                            non_sequences = [t_sparse_identity, (n_ind, n_params)])
         trans_mat = c2[-1]
         
         outer_var_likelihood = self.t_var_likelihood_func(t_phi, phi_p, t_theta, trans_mat)
@@ -116,16 +122,18 @@ class Model:
                                 outputs_info=None,
                                 sequences=[t_num_indxs, t_PHI_indxs_p, t_I],
                                 non_sequences=[rows, n_params, t_phi, t_theta, zero])
+
         data_loss = t_var_losses.sum()
         self.data_loss_func = theano.function([t_num_indxs, t_PHI_indxs_p, t_I,
-                                    rows, n_params, t_phi, t_theta, zero], data_loss)
+                                    rows, n_params, t_phi, t_theta], data_loss)
 
         data_loss_grad = T.grad(data_loss, [t_theta])
         self.data_loss_grad_func = theano.function([t_num_indxs, t_PHI_indxs_p, t_I,
-                                    rows, n_params, t_phi, t_theta, zero], data_loss_grad)
+                                    rows, n_params, t_phi, t_theta], data_loss_grad)
 
-    def set_index(self,vec,i,j):
-        vec[i,j] = 1
+    def add_index(self,vec,i,j, identity, size):
+        n_cols = size[1]
+        vec[i,0:n_cols] = vec[i,0:n_cols] + identity[j,0:n_cols]
         return vec
 
     def get_scan_vars(self, n_ind, inds, phi_p_indxs, phi, theta):
