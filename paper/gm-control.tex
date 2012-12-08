@@ -1,5 +1,5 @@
 \documentclass{article} % For LaTeX2e
-\usepackage{nips12submit_e,times,graphicx,amsmath,caption,subcaption,tikz,amsfonts}
+\usepackage{nips12submit_e,times,graphicx,amssymb,amsmath,caption,subcaption,tikz,amsfonts}
 %\documentstyle[nips12submit_09,times,art10]{article} % For LaTeX 2.09
 
 \title{Graphical Model Control}
@@ -19,19 +19,19 @@ University of Texas at Austin\\
 \newcommand{\fix}{\marginpar{FIX}}
 \newcommand{\new}{\marginpar{NEW}}
 
+\DeclareMathOperator*{\argmax}{arg\,max}
+
 \nipsfinalcopy
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-  This paper explores a novel method of learning and control in Markov Decision Processes (MDPs). Most Reinforcement Learning algorithms employ variants of the Bellman equations to maximize expected long-term reward. In contrast, this work applies graphical model learning and inference to the problem of Inverse Reinforcement Learning (IRL), in which sample trajectories are provided as input to the agent and the goals is to 
-
-to this work reduces finite timesteps in the MDP to Markov Random Fields. Inference and 
+This work applied graphical model and exponential family algorithms to the problem of Pure Imitation Learning in Markov Decision Processes (MDPs). It is demonstrated that the graph structure of a single MDP timestep could be decomposed into a Markov Random Field and that given a collection of data from an expert, efficient algorithms can be used to learn the parameters of an exponential family distribution. This distribution then may be used as a policy by estimating the Maximum a Posteriori (MAP) configuration that the variables. This policy is shown to adeptly re-create the policy of the expert, on whose data the model was trained, even when provided with far fewer samples than the number of possible states in the system.
 \end{abstract}
 
 \section{Background}
-A Markov Decision Process is a discrete time stochastic process where a decision making agent is required at each time step choose an action $a$ given its current state $s$. Formally an MDP is defined as a 4-tuple $\{S,A,P,R\}$ where $S$ is a finite set of states, $A$ is a finite set of actions, $P_a(s,s')$ is the probability that taking action $a$ in state $s$ at time $t$ will lead to state $s'$ at time $t+1$, and $R_a(s,s')$ is the immediate reward received after transition from state $s$ to state $s'$.
+A Markov Decision Process is a discrete time stochastic process where a decision making agent is required at each time step choose an action $a$ given its current state $s$. Formally an MDP is defined as a 4-tuple $\{S,A,P,R\}$ where $S$ is a finite set of states, $A$ is a finite set of actions, $P_a(s,s')$ is the probability that taking action $a$ in state $s$ at time $t$ will lead to state $s'$ at time $t+1$, and $R_a(s,s')$ is the immediate reward received after transition from state $s$ to state $s'$ \cite{bellman57}.
 
 To solve an MDP, the challenge is to find a policy $\pi(s)$ which specifies the action the decision maker will take in each state. An optimal policy $\pi^*(s)$ is a policy that maximizes the long term gamma discounted expectation of rewards:
 
@@ -40,7 +40,7 @@ To solve an MDP, the challenge is to find a policy $\pi(s)$ which specifies the 
 \pi^*(s) = \arg\max_\pi \{\sum_{t=0}^{\infty} \gamma^tR_{at}(s_t,s_{t+1}) \}
 \end{equation}
 
-Where $0 \le \gamma < 1$ is the discount factor which determines how much immediate rewards are favored compared to distant rewards. Solutions to the Reinforcement Learning problem of finding $\pi^*(s)$ typically involve estimating a value function using the Bellman optimality equations. This work focuses not a different but related problem, that of Imitation Learning.
+Where $0 \le \gamma < 1$ is the discount factor which determines how much immediate rewards are favored compared to distant rewards. Solutions to the Reinforcement Learning problem of finding $\pi^*(s)$ typically involve estimating a value function using the Bellman optimality equations \cite{sutton98}. This work focuses not a different but related problem, that of Imitation Learning.
 
 \subsection{Imitation Learning}
 Imitation learning refers to the setting in which an agent learns from information provided by an expert. We introduce two different variants of imitation learning: \textit{Seeded Imitation Learning} and \textit{Pure Imitation Learning}. In the seeded imitation learning case, the agent is ``seeded'' with experience from the expert. This experience informs the agent's initial policy, however the goal of seeded imitation learning remains the same -- find $\pi^*$. Thus the expert information provided may be useful in speeding up the learning process, but the ultimate policy reached in the domain should be the same regardless of what information is provided by the expert. Pure Imitation Learning, in contrast, challenges the agent to find a policy which best mimics the inferred policy of the expert as observed by the provided information. This optimal policy for pure imitation learning may not match the optimal policy for the MDP. In fact, the two policies would only be guaranteed to match in the case that the expert is acting under the optimal MDP policy and has provided enough information to the agent to fully recreate its policy.
@@ -114,7 +114,7 @@ In order to apply exponential family learning to a Markov Decision Processes, it
   \label{fig:structure}
 \end{figure}
 
-An exponential family may be defined over the graph in Figure \ref{fig:structure} by introducing potential functions $\phi(X)$ on the nodes and edges. Equation \ref{eqn:exp-family} defines the probability of an assignment $x$ nodes the nodes in the graph given the parameters $\theta$. This is derived from the Potts model described in \cite{wainwright08} using the standard overcomplete representation in which the potential functions $\phi$ take the form of indicator functions over discrete values $\chi$ (Equations \ref{eqn:node-ind}-\ref{eqn:edge-ind}).
+An exponential family may be defined over the graph in Figure \ref{fig:structure} by introducing potential functions $\phi(X)$ on the nodes and edges. Equation \ref{eqn:exp-family} defines the probability of an assignment $x$ nodes the nodes in the graph given the parameters $\theta$. This is derived from the Potts model described in \cite{wainwright08} using the standard overcomplete representation in which the potential functions $\phi$ take the form of indicator functions over discrete values $\mathcal{X}$ (Equations \ref{eqn:node-ind}-\ref{eqn:edge-ind}).
 
 \begin{equation}
 \label{eqn:exp-family}
@@ -127,19 +127,19 @@ p(x;\theta)
 \label{eqn:normalization}
 A(\theta)
 =
-\textrm{log} \sum_{X \in \chi^m} \textrm{exp}\left\{\sum_{s \in V}\theta_{s;j}(X_s) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s,X_t)\right\}
+\textrm{log} \sum_{X \in \mathcal{X}^m} \textrm{exp}\left\{\sum_{s \in V}\theta_{s;j}(X_s) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s,X_t)\right\}
 \end{equation}
 
 \noindent\begin{minipage}{.4\linewidth}
 \begin{equation}
 \label{eqn:exp-family}
-\theta_{s;j}(X_s) = \sum_{j \in \chi} \theta_{s;j} \mathbb{I}_{s;j}(X_s)
+\theta_{s;j}(X_s) = \sum_{j \in \mathcal{X}} \theta_{s;j} \mathbb{I}_{s;j}(X_s)
 \end{equation}
 \end{minipage}%
 \begin{minipage}{.6\linewidth}
 \begin{equation}
 \label{eqn:exp-family}
-\theta_{st;jk}(X_s,X_t) = \sum_{jk \in \chi \times \chi} \theta_{st;jk} \mathbb{I}_{st;jk}(X_s,X_t)
+\theta_{st;jk}(X_s,X_t) = \sum_{jk \in \mathcal{X} \times \mathcal{X}} \theta_{st;jk} \mathbb{I}_{st;jk}(X_s,X_t)
 \end{equation}
 \end{minipage}
 
@@ -178,7 +178,7 @@ The experimental domain selected was a 9x9 gridworld pictured in Figure \ref{fig
 \end{figure}
 
 \subsection{Graph Instantiation}
-More than simply specifying the dynamics of the domain, the particular state, action, and reward representation used must also be determined. The state of the system is fully described by the agents $(x,y)$ location in the world. This state is represented using 9 binary nodes to indicate which row the agent currently occupies and 9 binary nodes to represent the agent's current column. Hence at any point in time exactly two of the state variables are active. Each of the four directional actions is encoded using using two binary nodes whose joint configuration specifies which action is to be taken (eg $0,0=\leftarrow, 0,1=\rightarrow, 1,0=\uparrow, 1,1=\downarrow$). Rewards are encoded with using only a single binary node which is active when the agent reaches the goal state and inactive otherwise. When converted into the graphical representation described in Figure \ref{fig:structure}, the resulting graph contains a total of 39 vertexes (18 state nodes, 18 next state nodes, 2 action nodes, and a single reward node), and 416 edges. Parameterizing this graph according to the exponential family given in Equation \ref{eqn:exp-family} using a binary $\chi$ yields a total of 1742 indicator function sufficient statistics and parameters.
+More than simply specifying the dynamics of the domain, the particular state, action, and reward representation used must also be determined. The state of the system is fully described by the agents $(x,y)$ location in the world. This state is represented using 9 binary nodes to indicate which row the agent currently occupies and 9 binary nodes to represent the agent's current column. Hence at any point in time exactly two of the state variables are active. Each of the four directional actions is encoded using using two binary nodes whose joint configuration specifies which action is to be taken (eg $0,0=\leftarrow, 0,1=\rightarrow, 1,0=\uparrow, 1,1=\downarrow$). Rewards are encoded with using only a single binary node which is active when the agent reaches the goal state and inactive otherwise. When converted into the graphical representation described in Figure \ref{fig:structure}, the resulting graph contains a total of 39 vertexes (18 state nodes, 18 next state nodes, 2 action nodes, and a single reward node), and 416 edges. Parameterizing this graph according to the exponential family given in Equation \ref{eqn:exp-family} using a binary $\mathcal{X}$ yields a total of 1742 indicator function sufficient statistics and parameters.
 
 Having specified the dynamics of the MDP as well as its graphical instantiation, of interest now is the method used to learn parameters from data.
 
@@ -191,12 +191,12 @@ Computing the likelihood of an assignment $X$ to the variables in the graph is a
 \end{equation}
 
 \begin{equation}
-\textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \textrm{log}\frac{p(X = X^t)}{\sum_{j \in \chi} p(x_i = j, X_{V\setminus i} = X_{V\setminus i}^t)}
+\textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \textrm{log}\frac{p(X = X^t)}{\sum_{j \in \mathcal{X}} p(x_i = j, X_{V\setminus i} = X_{V\setminus i}^t)}
 \label{eqn:pseudologlikelihood}
 \end{equation}
 
 %% \begin{equation}
-%% \textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \frac{\textrm{exp}\{\sum_{s \in V}\theta_{s;j}(X_s^t) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s^t,X_t^t)\}} {\sum_{j \in \chi}\textrm{exp}\{\sum_{s \in V}\theta_{s;j}(X_s=j) + \sum_{(s,t) \in E} \theta_{st;jk}(X_i=j,X_t^t)\}}
+%% \textrm{log}\tilde{p}(X^t,\theta) = \sum_{i=1}^{|\phi|} \frac{\textrm{exp}\{\sum_{s \in V}\theta_{s;j}(X_s^t) + \sum_{(s,t) \in E} \theta_{st;jk}(X_s^t,X_t^t)\}} {\sum_{j \in \mathcal{X}}\textrm{exp}\{\sum_{s \in V}\theta_{s;j}(X_s=j) + \sum_{(s,t) \in E} \theta_{st;jk}(X_i=j,X_t^t)\}}
 %% \label{eqn:fullpsuedolikelihood}
 %% \end{equation}
 
@@ -220,25 +220,61 @@ Learning parameters of exponential families is an area of ongoing research in th
 Wainright et al. describe a closed form solution for deriving the maximum likelihood estimate of $\theta$ \cite{wainwright08}. Unfortunately it is only applicable to triangulated graphs. While the cluster graph shown in Figure \ref{fig:mrf} is triangulated, the complete graph contains chordless cycles between adjacent layers such as Figure \ref{fig:decomp}. As a result, an iterative method must be used to learn the optimal $\theta$s. However, a gradient of the objective function is required for most efficient optimization methods. The gradient of the pseudolikelihood with respect to $\theta$ is computed using automatic differentiation in Theano \cite{bergstra10} and minimize using iterative conjugate gradient \cite{hestenes52}. 
 
 \section{Results - Learning}
-50 data samples were collected from an optimal agent on the 9x9 gridworld. These data samples were divided into 2 mini-batches of size 25, with another 50 samples set apart for evaluation. Training took place iteratively over the mini batches using conjugate gradient.
+50 data samples were collected from an random agent on the 9x9 gridworld. These data samples were divided into 2 mini-batches of size 25, with another 50 samples were set apart for evaluation. Training took place iteratively over the mini batches using conjugate gradient.
 
-Figure \ref{fig:learning} compares the Average un-normalized probability of data samples from the optimal agent as well as those sampled from a random agent. The increased likelihood of the on-policy samples demonstrates that the learned model does indeed favor trajectories resembling the ones against which it has been trained.
+Figure \ref{fig:learning} shows the Average un-normalized probability of data samples from the random agent compared to the probability of random initializations of the state variables. Randomly initialized states variables encode transitions and rewards which are not possible in the Gridworld MDP, such as an agent teleporting between non-adjacent grid cells or getting reward when not reaching the goal. Hence, the increased likelihood of the on-policy samples demonstrates that the learned model favors trajectories resembling the ones against which it has been trained as opposed to ``imaginary'' transitions not possible in the MDP. The next section addresses the challenge of making use of the learned parameters.
 
-\begin{figure}[htp]
+\begin{figure}
   \centering
-  \includegraphics[width=.8\textwidth]{figures/graph.png}
-  \caption{Log-scaled probability of the data samples generated from a random policy and an optimal policy. This indicates that the learned model favors data generated from the optimal policy (on which it was trained) to random samples.}
+  \includegraphics[width=.7\textwidth]{figures/graph.png}
+  \caption{Log-scaled probability of the data sampled from a random policy (Policy Samples) and random initializations of state variables (Random Samples). This indicates that the learned model favors data generated from the policy on which it was trained to random node-wise initializations.}
   \label{fig:learning}
 \end{figure}
 
-Beyond learning the parameters of the model, it is necessary to use the model for control.
+
 
 \section{Control}
 
-Control in reinforcement learning typically involves to finding a policy which maximizes the long term gamma discounted sum of rewards. However, since pure imitation learning focuses instead on mimicing the expert's policy, the task becomes a supervised one where the agent is trained on $(S,R,S')$ instances whose labels are the expert's actions. While training in exponential families does not involve explicitly differentiating subsets of variables as classification labels, the underlying principles are similar. During evaluation, the objective is to identify the action that the expert would most likely have taken. Fortunately, graphical models have a natural way to perform this estimation task: the Maximum a Posteriori or MAP configuration refers to the maximally likely assignment of values to the sufficient statistics in the case of exponential families or nodes in the case of graphical models.
+Control in reinforcement learning typically involves to finding a policy which maximizes the long term gamma discounted sum of rewards. However, since pure imitation learning focuses instead on mimicing the expert's policy, the task becomes a supervised one where the agent is trained on $(S,R,S')$ instances whose labels are the expert's actions. While training in exponential families does not involve explicitly differentiating subsets of variables as classification labels, the underlying principles are similar. During evaluation, the objective is to identify the action that the expert would most likely have taken. Fortunately, graphical models have a natural way to perform this estimation task: the Maximum a Posteriori or MAP configuration refers to the maximally likely assignment of values to the sufficient statistics in the case of exponential families or nodes in the case of graphical models. Specifically, the goal is to find the configuration maximizing $p(x,\theta)$ which is equivalent to maximizing the inner product of the parameters and the sufficient statistics (Equation \ref{eqn:map}). Note that since $A(\theta)$ does not depend on $x$ it may be ignored. Furthermore, Wainwright and Jordan \cite{wainwright08} prove that the variable configuration maximizing the inner product of parameters and sufficient statistics is equivalent to the $\mu$ maximizing the boundary set of the marginal polytope $\bar{\mathcal{M}}$ (Equation \ref{eqn:equiv}). Thus the problem becomes one of finding the $\mu$s maximizing the inner product subject to the constraints of the marginal polytope. This problem is framed as a linear program in Equation \ref{eqn:lp}. Note that there are additional constraints added beyond those of the marginal polytope: these constraints enforce that the values of the variables corresponding to the state nodes in the graph are equal to observed state in the current timestep.
 
+\begin{equation}
+\argmax_{x \in \mathcal{X}^m} p(x,\theta) = \argmax_{x \in \mathcal{X}^m} \langle \theta, \phi(x) \rangle
+\label{eqn:map}
+\end{equation}
+
+\begin{equation}
+\max_{x \in \mathcal{X}^m} \langle \theta,\phi(x) \rangle = \max_{\mu \in \bar{\mathcal{M}}} \langle \theta, \mu \rangle
+\label{eqn:equiv}
+\end{equation}
+
+\begin{equation}
+\begin{array}{llr}
+\textrm{Maximize: } & \langle \theta, \mu \rangle & \textrm{(objective)}\\
+\textrm{Subject to: } & \sum_{x_i \in \mathcal{X}} \mu_i(x_i) = 1 & \textrm{(node-wise constraints)}\\
+& \sum_{x_j \in \mathcal{X}} \mu_{ij}(x_i,x_j) = \mu_i(x_i) & \textrm{(edge-wise constraints)}\\
+& x_s = X_s^t \textrm{ } \forall s \in \textrm{state nodes} & \textrm{(observed state constraints)}
+\end{array}
+\label{eqn:lp}
+\end{equation}
+
+Unfortunately, the linear program expressed in Equation \ref{eqn:lp} is only guaranteed to be integral in the case tree structured Markov Random Fields over discrete random variables. It is possible to enforce integral solutions by solving the corresponding integer program (IP), however integer programs are NP-hard in general. One solution to this problem is to rounding the real-valued $\mu$s returned by the linear program. This work utilizes a na\"{\i}ve rounding scheme in which real-values are rounded to the nearest discrete value in $\mathcal{X}$. Because the action nodes are the nodes of greatest interest and each possible configuration of action nodes corresponds to a legitimate action in the MDP, this na\"{\i}ve rounding scheme is guaranteed to return interpretable results. The next section delves into results obtained on the Gridworld domain using this control mechanism.
 
 \section{Results - Control}
+Control experiments were carried out on the 9x9 Gridworld. The first experiment involved learning from data produced by an optimal agent and quantifying how much reward was received compared to the optimal agent.
+
+Next the similarity between the learned policy $\pi$ and the experts policy $\bar{\pi}$ is examined as a function of the number of training data samples which were provided. Let us define the Policy Similarity of two policies in an MDP with a finite number of states and discrete actions as the percentage of states in which the policies choose the same action to execute. This quantity is defined formally in Equation \ref{eqn:policysim}.
+
+\begin{equation}
+\begin{array}{l}
+\textrm{Policy Similarity}(\pi,\pi') = \frac{1}{|S|}\sum_{s \in S} \mathbb{I}(\pi(s),\pi'(s)) \\
+\\
+\mathbb{I}(\pi(s),\pi'(s)) = \left\{ \begin{array}{rl}
+ 1 &\mbox{ if $\pi(s) = \pi'(s)$} \\
+ 0 &\mbox{ otherwise}
+\end{array} \right. \\
+\end{array}
+\label{eqn:policysim}
+\end{equation}
 
 \section{Future Work}
 There are many avenues of future work. One of the first possibilities would involve extending the graphical model to include more than a single time step in the MDP. Full trajectories could encompass arbitrarily man timesteps so graph size is theoretically unbounded. However, the discount factor $\gamma$ specifies a horizon beyond which rewards matter little. Therefore it would likely be possible to compute, given a setting for $\gamma$, the minimum size of the graph necessary to ensure learning converges within some constant factor of optimality. 
