@@ -119,40 +119,48 @@ class MapPolicy:
         action_code = map_config[self.m.n_state_nodes:self.m.n_state_nodes+2]
         return self.env.code_to_action(action_code)
 
-def main(model_size = (18,2,18), dist = 'uniform', n_iters = 10):
+def main(model_size = (18,2,18), dist = 'uniform', n_iters = 1):
     
-    file_str = 'model.%i.%i.%s.pickle.gz'%(model_size[0],model_size[1],dist)
+    # file_str = 'model.%i.%i.%s.pickle.gz'%(model_size[0],model_size[1],dist)
 
-    try:
-        with util.openz(file_str) as f:
-            print 'found previous file, using: ', f
-            m = pickle.load(f)
-    except IOError:
-        print 'no serialized model found, training a new one'
-        m = model.train_model_cg(model_size, dist = dist)
-        with util.openz(file_str, 'wb') as f:
-            pickle.dump(m, f)
+    # try:
+    #     with util.openz(file_str) as f:
+    #         print 'found previous file, using: ', f
+    #         m = pickle.load(f)
+    # except IOError:
+    #     print 'no serialized model found, training a new one'
+    #     m = model.train_model_cg(model_size, dist = dist)
+    #     with util.openz(file_str, 'wb') as f:
+    #         pickle.dump(m, f)
 
     mdp = grid_world.MDP() 
-    map_policy = MapPolicy(m, mdp.env)
-    mdp.policy = map_policy
-
+    #map_policy = MapPolicy(m, mdp.env)
+    optimal_policy = grid_world.OptimalPolicy(mdp.env)
+    mdp.policy = optimal_policy
 
     for i in xrange(n_iters):
-        state = mdp.env.state
-        print 'current state: ', state
+        state = None
+        while not mdp.env.is_goal_state():
+            state = mdp.env.state
+            print 'current state: ', state
 
-        # convert state to binary vector
-        phi_s = np.zeros(model_size[0])
-        phi_s[state[0]] = 1 
-        phi_s[mdp.env.n_rows + state[1]] = 1
+            actions = mdp.env.get_actions(state)
 
-        pos, act, pos_p, r = parse_config(get_map(m, phi_s), m, mdp.env)
+            act = optimal_policy.choose_action(actions)
 
-        mdp.env.take_action(act)
+            # convert state to binary vector
+            # phi_s = np.zeros(model_size[0])
+            # phi_s[state[0]] = 1 
+            # phi_s[mdp.env.n_rows + state[1]] = 1
 
-    print 'map configuration: ', pos, act, pos_p, r
+            # pos, act, pos_p, r = parse_config(get_map(m, phi_s), m, mdp.env)
 
+            mdp.env.take_action(act)
+
+
+        print 'final state: ', mdp.env.state
+
+    #print 'map configuration: ', pos, act, pos_p, r
 
 
 if __name__ == '__main__':

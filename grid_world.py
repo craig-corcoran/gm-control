@@ -141,6 +141,11 @@ class GridWorld:
             return pos
         else:
             return self.state
+
+    def is_goal_state(self):
+        if self.goals[tuple(self.state)] == 1:
+            return True
+        return False
         
     def take_action(self, action):
         '''take the given action, if valid, changing the state of the 
@@ -185,31 +190,44 @@ class OptimalPolicy:
     
 
     def choose_action(self, actions):
-        max_val = -numpy.inf
-        act = numpy.zeros(2)
-        for a in actions:
-            new_state, r = self.env.take_action(a)
-            ind = self.env.state_to_index(new_state)
-            val = self.v[ind]
-            if val > max_val:
-                max_val = val
-                act = a
+        assert(len(self.env.goals.nonzero()[0])==1) # assume 1 goal
+        g = self.env.goals.nonzero()
+        goal = (g[0][0], g[1][0])
+        xdist = goal[0] - self.env.state[0]
+        ydist = goal[1] - self.env.state[1]
+        act = None
+        if abs(xdist) > 0:
+            act = [1,0] if xdist > 0 else [-1,0]
+        else:
+            act = [0,1] if ydist > 0 else [0,-1]
+
+        print 'xdist: ', xdist, 'ydist:', ydist,'action in opt: ', act
+        # max_val = -numpy.inf
+        # act = numpy.zeros(2)
+        # for a in actions:
+        #     new_state, r = self.env.take_action(a)
+        #     ind = self.env.state_to_index(new_state)
+        #     val = self.v[ind]
+        #     if val > max_val:
+        #         max_val = val
+        #         act = a
         
         return act
 
 
 class MDP:
     
-    def __init__(self, environment=None, policy=None, walls_on = True):
+    def __init__(self, environment=None, policy=None, walls_on = False):
         self.env = environment
         self.policy = policy
 
         if environment is None:
             size = 9
-            buff = size/9
-            pos = size/3-1
+            # buff = size/9
+            # pos = size/3-1
             goals = numpy.zeros((size,size))
-            goals[pos-buff:pos+buff, pos-buff:pos+buff] = 1
+            # goals[pos-buff:pos+buff, pos-buff:pos+buff] = 1
+            goals[2,2] = 1
             print 'goal position: ', goals.nonzero()
             #goals[pos-buff:pos+buff, size-pos-buff:size-pos+buff] = 1
             #goals[size-pos-buff:size-pos+buff, pos-buff:pos+buff] = 1
@@ -350,14 +368,14 @@ def init_mdp(goals = None, walls_on = False, size = 9):
 
     if goals is None:
 
-        buff = size/9
-        pos = size/3-1
-        goals = numpy.zeros((size,size))
-        goals[pos-buff:pos+buff, pos-buff:pos+buff] = 1
+        # buff = size/9
+        # pos = size/3-1
+        # goals = numpy.zeros((size,size))
+        # goals[pos-buff:pos+buff, pos-buff:pos+buff] = 1
         #goals[pos-buff:pos+buff, size-pos-buff:size-pos+buff] = 1
         #goals[size-pos-buff:size-pos+buff, pos-buff:pos+buff] = 1
         #goals[size-pos-buff:size-pos+buff, size-pos-buff:size-pos+buff] = 1
-
+        goals[2,2] = 1
  
     walls = numpy.zeros((size,size))
     if walls_on:
