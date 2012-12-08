@@ -210,6 +210,7 @@ class MDP:
             pos = size/3-1
             goals = numpy.zeros((size,size))
             goals[pos-buff:pos+buff, pos-buff:pos+buff] = 1
+            print 'goal position: ', goals.nonzero()
             #goals[pos-buff:pos+buff, size-pos-buff:size-pos+buff] = 1
             #goals[size-pos-buff:size-pos+buff, pos-buff:pos+buff] = 1
             #goals[size-pos-buff:size-pos+buff, size-pos-buff:size-pos+buff] = 1
@@ -259,6 +260,11 @@ class MDP:
                 actions[i] = a
                 actions_p[i] = a_p
                 rewards[i] = r
+            
+            s = states
+            s_p = states_p
+            a = actions
+            a_p = actions_p
 
 
         elif distribution is 'policy':
@@ -296,11 +302,12 @@ class MDP:
         return s, s_p, a, a_p, rewards
 
 
-    def sample_grid_world(self, n_samples, state_rep = 'factored'):
+    def sample_grid_world(self, n_samples, state_rep = 'factored', 
+                                                distribution = 'policy'):
 
         # mdp = init_mdp()
         # env = mdp.env
-        states, states_p, actions, actions_p, rewards = self.sample(n_samples)
+        states, states_p, actions, actions_p, rewards = self.sample(n_samples, distribution)
 
         if state_rep == 'tabular':
             n_state_var = self.env.n_states
@@ -323,11 +330,12 @@ class MDP:
             elif state_rep == 'factored':
                 state = states[i,:]
                 state_p = states[i,:]
-
+                
+                # todo add standard encoding function
                 # encode row and col position
                 X[i,state[0]] = 1 
                 X[i,self.env.n_rows + state[1]] = 1
-
+    
                 X[i,n_state_var:n_state_var + n_act_var] = self.env.action_to_code[tuple(actions[i,:])]
 
                 X[i,n_state_var + n_act_var + state_p[0]] = 1

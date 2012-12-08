@@ -65,7 +65,6 @@ def get_map(m, state):
         if pulp.value(mu[2*i+1]) == 1:
             map_config[i] = 1
         else:
-            print pulp.value(mu[2*i+1])
             assert pulp.value(mu[2*i+1]) == 0
         
         assert not(pulp.value(mu[2*i]) == pulp.value(mu[2*i+1]))
@@ -83,20 +82,28 @@ def parse_config(map_config, m, env, state_rep = 'factored'):
     
     # convert from encoding to array
     if state_rep == 'factored':
-        pos = s.nonzero()
+        pos = s.nonzero()[0]
         assert len(pos) == 2
         pos[1] = pos[1] % (m.n_state_nodes/2)
 
-        pos_p = s_p.nonzero()
-        assert len(pos_p) == 2
-        pos_p[1] = pos_p[1] % (m.n_state_nodes/2)
-        
+        pos_p = s_p.nonzero()[0]
+        print pos_p
+        try:
+            assert len(pos_p) == 2
+            pos_p[1] = pos_p[1] % (m.n_state_nodes/2)
+        except AssertionError:
+            print 'there are more or less than 2 nz elements in the s_p config'
+            print pos_p
+            if len(pos_p) == 1:
+                pos_p = np.array([pos_p[0],-1]) # insert bogus y pos
+            elif len(pos_p) == 0:
+                pos_p = np.array([-1,-1]) # insert bogus y pos
 
     else:
         print 'representations other than factored not implemented'
         assert False
 
-    act = env.code_to_action[a]
+    act = env.code_to_action[tuple(a)]
     
     return pos, act, pos_p, r
 
@@ -112,25 +119,37 @@ class MapPolicy:
         action_code = map_config[self.m.n_state_nodes:self.m.n_state_nodes+2]
         return self.env.code_to_action(action_code)
 
-def main(model_size = (18,2,18)):
+def main(model_size = (18,2,18), dist = 'uniform', n_iters = 10):
     
+    file_str = 'model.%i.%i.%s.pickle.gz'%(model_size[0],model_size[1],dist)
+
     try:
-        with util.openz('model.18.2.pickle.gz') as f:
+        with util.openz(file_str) as f:
             print 'found previous file, using: ', f
             m = pickle.load(f)
     except IOError:
         print 'no serialized model found, training a new one'
-        m = model.train_model_cg(model_size)
-        with util.openz('model.18.2.pickle.gz', 'wb') as f:
+        m = model.train_model_cg(model_size, dist = dist)
+        with util.openz(file_str, 'wb') as f:
             pickle.dump(m, f)
 
     mdp = grid_world.MDP() 
     map_policy = MapPolicy(m, mdp.env)
     mdp.policy = map_policy
 
-    state = mdp.env.state
-    print 'current state: ', state
-    pos, act, pos_p, r = parse_config(get_map(m, state), m, mdp.env)
+
+    for i in xrange(n_iters):
+        state = mdp.env.state
+        print 'current state: ', state
+
+        # convert state to binary vector
+        phi_s = np.zeros(model_size[0])
+        phi_s[state[0]] = 1 
+        phi_s[mdp.env.n_rows + state[1]] = 1
+
+        pos, act, pos_p, r = parse_config(get_map(m, phi_s), m, mdp.env)
+
+        mdp.env.take_action(act)
 
     print 'map configuration: ', pos, act, pos_p, r
 

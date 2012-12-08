@@ -114,7 +114,7 @@ class Model:
         return scipy.sparse.csc_matrix(Phi)
             
 
-    def pseudo_likelihood(self, theta, data):
+    def pseudo_likelihood_loss(self, theta, data):
         ''' data is a list of lists where each inner list is a assigment of
         values to all of the nodes - returns negative sum of log psl over the 
         data'''
@@ -134,6 +134,7 @@ class Model:
                 d_prime[i] = d[i]
 
                 l += self.t_var_likelihood_func(phi, phi_p, theta, t)
+            
         
         return (-1. * l) / len(data)
 
@@ -155,9 +156,11 @@ class Model:
         
         return (-1. * g.flatten()) / len(data)
 
-    def get_data(self, mdp, n_samples, n_test_samples, state_rep = 'factored'):
+    def get_data(self, mdp, n_samples, n_test_samples, state_rep = 'factored',
+                                            distribution = 'uniform'):
     
-        all_data = mdp.sample_grid_world(n_samples + n_test_samples, state_rep )
+        all_data = mdp.sample_grid_world(n_samples + n_test_samples, state_rep,
+                                        distribution)
         np.random.shuffle(all_data)
 
         data = all_data[:n_samples]
@@ -168,7 +171,8 @@ class Model:
 
 
 
-def train_model_cg(model_size = (18, 2, 18), minibatch = 25, n_samples = 50, n_test_samples = 50, cg_max_iter = 3):
+def train_model_cg(model_size = (18, 2, 18), minibatch = 100, n_samples = 500, 
+                    n_test_samples = 50, cg_max_iter = 4, dist = 'uniform'):
     import grid_world
     
     m = Model(*model_size)
@@ -180,7 +184,7 @@ def train_model_cg(model_size = (18, 2, 18), minibatch = 25, n_samples = 50, n_t
     mdp.policy = grid_world.OptimalPolicy(mdp.env)
 
     data, test_data = m.get_data(mdp, n_samples, n_test_samples,  
-                                        state_rep = 'factored')
+                                        state_rep = 'factored', distribution = dist)
     n_iters = n_samples / minibatch
 
     print 'initial loss: ', m.pseudo_likelihood(m.theta, test_data)
@@ -219,34 +223,6 @@ def train_model_cg(model_size = (18, 2, 18), minibatch = 25, n_samples = 50, n_t
         if delta < 1e-20:
             break
 
-    return m
-
-
-def train_model_sgd( minibatch = 250, n_samples = 2500, n_test_samples =500, alpha = 1e-1):
-    
-    import grid_world
-    
-    #m = Model(81, 2, 81)
-    m = Model(18, 2, 18)
-
-    print 'Generating Samples Trajectory from Gridworld...'
-    mdp = grid_world.MDP()
-    data, test_data = m.get_data(mdp, n_samples, n_test_samples,  
-                                        state_rep = 'factored')
-    n_iters = n_samples / minibatch
-
-    print 'initial loss: ', m.pseudo_likelihood(m.theta, test_data)
-
-    for i in xrange(n_iters):
-        
-        alpha *= 0.9
-        
-        mb = data[i*minibatch: (i+1)*minibatch]
-
-        m.theta -= alpha * m.pseudo_likelihood_grad(m.theta, mb)[:,None]
-        
-        print 'new loss: ', m.pseudo_likelihood(m.theta, test_data)
-    
     return m
 
 
