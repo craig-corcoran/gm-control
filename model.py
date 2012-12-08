@@ -11,6 +11,9 @@ class Model:
     def __init__(self, n_state_nodes, n_action_nodes, n_next_state_nodes, n_reward_nodes = 1):
         # X = <S,A,S',R>
         n = 0
+        self.n_state_nodes = n_state_nodes
+        self.n_action_nodes = n_action_nodes
+
         self.state_nodes      = range(n, n + n_state_nodes)
         n += n_state_nodes
         self.action_nodes     = range(n, n + n_action_nodes)
@@ -36,9 +39,7 @@ class Model:
         # Theta = <node-wise params, edge-wise params>
         # theta_s,j = |chi| * s + j
         # theta_edge,j,k = |chi|*|V| + (|chi|^2)*edge + |chi|*j + k
-        #self.theta = csc_matrix( (self.n_params,1), dtype=np.float)
         self.theta = np.zeros((self.n_params,1), dtype = np.float)
-        #self.theta = np.random.standard_normal((self.n_params, 1))
     
         print 'building transformation matrices for each node'
         self.T = [None]*self.n_nodes
@@ -94,8 +95,7 @@ class Model:
         
         n_nz_col = self.n_nodes + self.n_edges    # number of nonzeros per column in PHI
         n_nz = n_nz_col * self.n_nodes # total number of nonzeros in PHI
-        #Phi = csc_matrix( (self.n_params,self.n_nodes+1), dtype=np.int8)
-        #Phi[:,0] = self.get_phi(d)
+
         rows = np.zeros( n_nz, dtype = np.int32)
         cols = np.zeros( n_nz, dtype = np.int32)
         vals = np.ones( n_nz, dtype = np.int8)
@@ -111,7 +111,7 @@ class Model:
             d_prime[i] = d[i]
             
         Phi = scipy.sparse.coo_matrix((vals,(rows,cols)), shape=(self.n_params,self.n_nodes+1))
-        return scipy.sparse.csr_matrix(Phi)
+        return scipy.sparse.csc_matrix(Phi)
             
 
     def pseudo_likelihood(self, theta, data):
@@ -168,14 +168,17 @@ class Model:
 
 
 
-def train_model_cg(minibatch = 25, n_samples = 50, n_test_samples = 50, cg_max_iter = 3):
+def train_model_cg(model_size = (18, 2, 18), minibatch = 25, n_samples = 50, n_test_samples = 50, cg_max_iter = 3):
     import grid_world
     
-    #m = Model(81, 2, 81)
-    m = Model(18, 2, 18)
+    m = Model(*model_size)
 
     print 'Generating Samples Trajectory from Gridworld...'
     mdp = grid_world.MDP()
+
+    print 'using optimal policy for training'
+    mdp.policy = grid_world.OptimalPolicy(mdp.env)
+
     data, test_data = m.get_data(mdp, n_samples, n_test_samples,  
                                         state_rep = 'factored')
     n_iters = n_samples / minibatch

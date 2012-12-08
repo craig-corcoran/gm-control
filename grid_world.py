@@ -14,14 +14,14 @@ class GridWorld:
     '''
 
     _vecs = numpy.array([[1, 0], [-1, 0], [0, 1], [0, -1]]) # 4 movement dirs
-    action_code = dict(zip(map(tuple,_vecs),[(0, 0),(0, 1), (1, 0), (1, 1)]))
+    action_to_code = dict(zip(map(tuple,_vecs),[(0, 0),(0, 1), (1, 0), (1, 1)]))
+    code_to_action = dict(zip(action_to_code.values(), action_to_code.keys()))
 
     def __init__(self, wall_matrix, goal_matrix, init_state = None, uniform = False):
         
         self.walls = wall_matrix
         self.goals = goal_matrix
         goal_list = zip(*self.goals.nonzero())
-        # TODO assert walls and goals are correct format
 
         self.n_rows, self.n_cols = self.walls.shape
         self.n_states = self.n_rows * self.n_cols
@@ -175,6 +175,29 @@ class RandomPolicy:
     def choose_action(self, actions):
         return choice(list(actions))
 
+class OptimalPolicy:
+    ''' acts according to the value function of a random agent - should be 
+    sufficient in grid world'''
+
+    def __init__(self, env, gam = 0.99):
+        self.env = env
+        self.v = value_iteration(env.P, env.R, gam, eps = 1e-4)
+    
+
+    def choose_action(self, actions):
+        max_val = -numpy.inf
+        act = numpy.zeros(2)
+        for a in actions:
+            new_state, r = self.env.take_action(a)
+            ind = self.env.state_to_index(new_state)
+            val = self.v[ind]
+            if val > max_val:
+                max_val = val
+                act = a
+        
+        return act
+
+
 class MDP:
     
     def __init__(self, environment=None, policy=None, walls_on = True):
@@ -240,7 +263,7 @@ class MDP:
 
         elif distribution is 'policy':
 
-            print 'sampling with a random policy distribution'
+            print 'sampling with a policy distribution'
 
             states = numpy.zeros((n_samples+1,2), dtype = numpy.int)
             states[0] = self.env.state
@@ -293,7 +316,7 @@ class MDP:
 
             if state_rep == 'tabular':
                 X[i,self.env.state_to_index(states[i,:])] = 1
-                X[i,n_state_var:n_state_var + n_act_var] = self.env.action_code[tuple(actions[i,:])]
+                X[i,n_state_var:n_state_var + n_act_var] = self.env.action_to_code[tuple(actions[i,:])]
                 X[i,n_state_var + n_act_var + self.env.state_to_index(states_p)] = 1
                 X[i,-1] = rewards[i]
 
@@ -305,7 +328,7 @@ class MDP:
                 X[i,state[0]] = 1 
                 X[i,self.env.n_rows + state[1]] = 1
 
-                X[i,n_state_var:n_state_var + n_act_var] = self.env.action_code[tuple(actions[i,:])]
+                X[i,n_state_var:n_state_var + n_act_var] = self.env.action_to_code[tuple(actions[i,:])]
 
                 X[i,n_state_var + n_act_var + state_p[0]] = 1
                 X[i,n_state_var + n_act_var + self.env.n_rows + state_p[1]] = 1
@@ -344,16 +367,17 @@ def init_mdp(goals = None, walls_on = False, size = 9):
 def value_iteration(P, R, gam, eps = 1e-4):
     '''solve for true value function using value iteration '''
     V = numpy.zeros((P.shape[0], 1))
+    if R.ndim == 1:
+        R = R[:,None]
     delta = 1e4
     while numpy.linalg.norm(delta) > eps:
-        print numpy.linalg.norm(delta)
         delta = R + gam * numpy.dot(P, V) - V
         V = V + delta
 
-    print V.shape
-    plt.imshow(numpy.reshape(V, (9,9)), interpolation = 'nearest', cmap = 'jet')
-    plt.colorbar()
-    plt.show()
+    #plt.imshow(numpy.reshape(V, (9,9)), interpolation = 'nearest', cmap = 'jet')
+    #plt.colorbar()
+    #plt.show()
+    return V
 
 def plot_weights(W, im_shape):
         
