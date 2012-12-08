@@ -200,18 +200,7 @@ class OptimalPolicy:
             act = [1,0] if xdist > 0 else [-1,0]
         else:
             act = [0,1] if ydist > 0 else [0,-1]
-
-        print 'xdist: ', xdist, 'ydist:', ydist,'action in opt: ', act
-        # max_val = -numpy.inf
-        # act = numpy.zeros(2)
-        # for a in actions:
-        #     new_state, r = self.env.take_action(a)
-        #     ind = self.env.state_to_index(new_state)
-        #     val = self.v[ind]
-        #     if val > max_val:
-        #         max_val = val
-        #         act = a
-        
+ 
         return act
 
 
@@ -367,14 +356,6 @@ class MDP:
 def init_mdp(goals = None, walls_on = False, size = 9):
 
     if goals is None:
-
-        # buff = size/9
-        # pos = size/3-1
-        # goals = numpy.zeros((size,size))
-        # goals[pos-buff:pos+buff, pos-buff:pos+buff] = 1
-        #goals[pos-buff:pos+buff, size-pos-buff:size-pos+buff] = 1
-        #goals[size-pos-buff:size-pos+buff, pos-buff:pos+buff] = 1
-        #goals[size-pos-buff:size-pos+buff, size-pos-buff:size-pos+buff] = 1
         goals[2,2] = 1
  
     walls = numpy.zeros((size,size))

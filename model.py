@@ -71,6 +71,9 @@ class Model:
         t_var_likelihood_grad = T.grad(t_var_likelihood, [t_theta])
         self.t_gradient_func = theano.function([t_phi, t_phi_p, t_theta, t_T], t_var_likelihood_grad)
 
+        t_sparsity = abs(t_theta)
+        self.t_regularization_func = theano.function([t_theta], t_sparsity)
+
 
     def get_phi_indexes(self, d):
         index_list = np.zeros(self.n_nodes + self.n_edges, dtype = np.int32)
@@ -171,23 +174,26 @@ class Model:
 
 
 
-def train_model_cg(model_size = (18, 2, 18), minibatch = 100, n_samples = 500, 
-                    n_test_samples = 50, cg_max_iter = 4, dist = 'uniform'):
+def train_model_cg(model_size = (18, 2, 18), minibatch = 50, n_samples = 250, 
+                    n_test_samples = 50, cg_max_iter = 3, dist = 'uniform', use_opt_policy = True):
     import grid_world
     
     m = Model(*model_size)
-
+    
     print 'Generating Samples Trajectory from Gridworld...'
     mdp = grid_world.MDP()
 
-    print 'using optimal policy for training'
-    mdp.policy = grid_world.OptimalPolicy(mdp.env)
+    if use_opt_policy:
+        print 'using optimal policy for training'
+        mdp.policy = grid_world.OptimalPolicy(mdp.env)
+    else:
+        print 'using random policy for training'
 
     data, test_data = m.get_data(mdp, n_samples, n_test_samples,  
                                         state_rep = 'factored', distribution = dist)
     n_iters = n_samples / minibatch
 
-    print 'initial loss: ', m.pseudo_likelihood(m.theta, test_data)
+    print 'initial loss: ', m.pseudo_likelihood_loss(m.theta, test_data)
 
     for i in xrange(n_iters):
 
@@ -196,7 +202,7 @@ def train_model_cg(model_size = (18, 2, 18), minibatch = 100, n_samples = 500,
         mb = data[i*minibatch: (i+1)*minibatch]
 
         n_theta, val, fc, gc, w = scipy.optimize.fmin_cg(
-                                m.pseudo_likelihood,
+                                m.pseudo_likelihood_loss,
                                 m.theta,
                                 fprime = m.pseudo_likelihood_grad, 
                                 args = (mb,), 
@@ -218,7 +224,7 @@ def train_model_cg(model_size = (18, 2, 18), minibatch = 100, n_samples = 500,
 
         m.theta = n_theta
         print 'current training min: ', val
-        print 'new test loss: ', m.pseudo_likelihood(m.theta, test_data)
+        print 'new test loss: ', m.pseudo_likelihood_loss(m.theta, test_data)
 
         if delta < 1e-20:
             break

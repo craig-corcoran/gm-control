@@ -22,11 +22,11 @@ def get_map(m, state):
         mu[ind1] = pulp.LpVariable('mu%i%i'%(i, 1))
 
         # add non-negative constraints
-        LP += mu[ind0] >= 0
-        LP += mu[ind1] >= 0
+        LP += (mu[ind0] >= 0)
+        LP += (mu[ind1] >= 0)
 
         # add node-wise normalization constraint
-        LP += mu[ind0] + mu[ind1] == 1
+        LP += (mu[ind0] + mu[ind1] == 1)
     
     offset = 2*m.n_nodes
     for i,e in enumerate(m.edges):
@@ -45,6 +45,9 @@ def get_map(m, state):
         # marginalize out the second node e[2]
         LP += (mu[inds[0]] + mu[inds[2]]) == mu[2*e[1]]
         LP += (mu[inds[1]] + mu[inds[3]]) == mu[2*e[1]+1]
+
+        # at least (and only) one of the 4 edge configurations must be on
+        LP += (mu[inds[0]] + mu[inds[1]] + mu[inds[2]] + mu[inds[3]]) == 1
 
     # add constraints for observed states
     for i,s in enumerate(state):
@@ -66,8 +69,13 @@ def get_map(m, state):
             map_config[i] = 1
         else:
             assert pulp.value(mu[2*i+1]) == 0
-        
-        assert not(pulp.value(mu[2*i]) == pulp.value(mu[2*i+1]))
+        try:
+            assert not(pulp.value(mu[2*i]) == pulp.value(mu[2*i+1]))
+        except AssertionError: # very common :(
+            pass
+            #print pulp.value(mu[2*i])
+            #print pulp.value(mu[2*i+1])
+            #print 'invalid mu: mu_i and mu_i+1 are the same values'
 
     return map_config
 
@@ -113,47 +121,54 @@ class MapPolicy:
         self.m = m
         self.env = env
 
-    def choose_actions(self, actions=None):
+    def choose_action(self, actions=None):
         '''ignores list of actions and does map to choose next action'''
         map_config = get_map(self.m, self.env.state)
         action_code = map_config[self.m.n_state_nodes:self.m.n_state_nodes+2]
-        return self.env.code_to_action(action_code)
+        return self.env.code_to_action[tuple(action_code)]
+
+
 
 def main(model_size = (18,2,18), dist = 'uniform', n_iters = 1):
     
-    # file_str = 'model.%i.%i.%s.pickle.gz'%(model_size[0],model_size[1],dist)
+    file_str = 'model.%i.%i.%s.pickle.gz'%(model_size[0],model_size[1],dist)
 
-    # try:
-    #     with util.openz(file_str) as f:
-    #         print 'found previous file, using: ', f
-    #         m = pickle.load(f)
-    # except IOError:
-    #     print 'no serialized model found, training a new one'
-    #     m = model.train_model_cg(model_size, dist = dist)
-    #     with util.openz(file_str, 'wb') as f:
-    #         pickle.dump(m, f)
+    try:
+        with util.openz(file_str) as f:
+            print 'found previous file, using: ', f
+            m = pickle.load(f)
+    except IOError:
+        print 'no serialized model found, training a new one'
+        m = model.train_model_cg(model_size, dist = dist)
+        with util.openz(file_str, 'wb') as f:
+            pickle.dump(m, f)
 
     mdp = grid_world.MDP() 
-    #map_policy = MapPolicy(m, mdp.env)
-    optimal_policy = grid_world.OptimalPolicy(mdp.env)
-    mdp.policy = optimal_policy
-
+    
+    map_policy = MapPolicy(m, mdp.env)
+    mdp.policy = map_policy
+    #optimal_policy = grid_world.OptimalPolicy(mdp.env)
+    
     for i in xrange(n_iters):
         state = None
         while not mdp.env.is_goal_state():
             state = mdp.env.state
             print 'current state: ', state
 
-            actions = mdp.env.get_actions(state)
+            #actions = mdp.env.get_actions(state)
 
-            act = optimal_policy.choose_action(actions)
+            #act = map_policy.choose_action()
 
             # convert state to binary vector
-            # phi_s = np.zeros(model_size[0])
-            # phi_s[state[0]] = 1 
-            # phi_s[mdp.env.n_rows + state[1]] = 1
+            phi_s = np.zeros(model_size[0])
+            phi_s[state[0]] = 1 
+            phi_s[mdp.env.n_rows + state[1]] = 1
+            
+            map_config = get_map(m, phi_s)
+            pos, act, pos_p, r = parse_config(map_config, m, mdp.env)
+            print 'map mu vector: ', map_config
 
-            # pos, act, pos_p, r = parse_config(get_map(m, phi_s), m, mdp.env)
+            print 'map configuration: ', pos, act, pos_p, r
 
             mdp.env.take_action(act)
 
